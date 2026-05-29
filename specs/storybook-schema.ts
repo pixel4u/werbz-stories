@@ -1,12 +1,12 @@
 /**
- * ReallyVibrant Stories — Shared content contract
+ * werbz Stories — Shared content contract
  * --------------------------------------------------
  * This is the SINGLE SOURCE OF TRUTH for what a Storybook is.
  * It is imported by BOTH the Studio (editor) and the 3D Book (viewer),
  * so neither side can drift from the other.
  *
- * Path suggestion in your monorepo:
- *   packages/stories-core/src/schema.ts
+ * Path suggestion in this standalone app:
+ *   src/lib/stories/schema.ts
  *
  * Rule of thumb: the Studio writes objects of these types; the Book
  * reads objects of these types. The database `content` jsonb column
@@ -111,7 +111,7 @@ export type StorybookStatus = z.infer<typeof StorybookStatus>;
 
 export const Storybook = z.object({
   id: z.string(),
-  slug: z.string().regex(/^[a-z0-9-]+$/), // URL: /stories/[slug]
+  slug: z.string().regex(/^[a-z0-9-]+$/), // URL: /[slug]
   title: z.string().min(1).max(200),
   summary: z.string().max(500).optional(), // shown in the Library list
   coverAssetId: z.string().optional(), // thumbnail for the Library

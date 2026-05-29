@@ -1,7 +1,7 @@
 /**
- * ReallyVibrant Stories — Drizzle schema (PostgreSQL)
+ * werbz Stories — Drizzle schema (PostgreSQL)
  * ----------------------------------------------------
- * Path suggestion: packages/db/src/schema/stories.ts
+ * Path suggestion: src/db/schema.ts
  *
  * Design notes:
  *  - `pages.content` is jsonb holding the `PageContent` union from
@@ -36,7 +36,7 @@ export const storybooks = pgTable(
     slug: text("slug").notNull(),
     title: text("title").notNull(),
     summary: text("summary"),
-    coverAssetId: uuid("cover_asset_id"),
+    coverAssetId: text("cover_asset_id").references(() => assets.id, { onDelete: "set null" }),
     status: storybookStatus("status").notNull().default("draft"),
     theme: jsonb("theme"), // optional per-book Book config (your Copy-config JSON)
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -67,7 +67,7 @@ export const pages = pgTable(
 
 /* ── Assets (images, video, embed bundles, posters) ─────────── */
 export const assets = pgTable("assets", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: text("id").primaryKey(),
   storageKey: text("storage_key").notNull(), // R2 / uploads path
   mimeType: text("mime_type").notNull(),
   bytes: integer("bytes").notNull(),
