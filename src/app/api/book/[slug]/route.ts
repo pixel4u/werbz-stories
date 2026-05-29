@@ -3,18 +3,19 @@ import { join } from "node:path";
 
 import { NextResponse } from "next/server";
 
-function buildEngineHtml(slug: string): string {
+function buildEngineHtml(slug: string, debug: boolean): string {
   const sourcePath = join(process.cwd(), "specs", "book-engine-v27.html");
   let html = readFileSync(sourcePath, "utf8");
 
   html = html.replace(
     /let pages = \[[\s\S]*?\n\s*\];/,
-    "let pages = [{ kind: 'text', eyebrow: 'LOADING', title: 'Loading story…', body: 'Fetching Storybook JSON from API.', align: 'left', num: 1 }];"
+    "let pages = [{ kind: 'text', eyebrow: 'LOADING', title: 'Loading story…', body: 'Fetching Storybook JSON from API.', align: 'left', num: 1, __meta: { id: 'loading', position: 0, side: 'left' } }];"
   );
 
   html = html.replace(
     "function loadPageTexture(index) { return createPlaceholderTexture(pages[index]); }",
-    `function getAssetUrl(assetId) { return '/api/assets/' + encodeURIComponent(assetId); }
+    `const DEBUG_MODE = ${debug ? "true" : "false"};
+    function getAssetUrl(assetId) { return '/api/assets/' + encodeURIComponent(assetId); }
     function loadPageTexture(index) {
       return createStoryTexture(pages[index]);
     }`
@@ -34,16 +35,32 @@ function buildEngineHtml(slug: string): string {
       if (kind === 'text') {
         drawTextPage(ctx, canvas, page);
       } else if (kind === 'image') {
-        drawMediaPlaceholder(ctx, canvas, 'IMAGE', page.assetId, '#1e293b');
-        drawImageAsync(canvas, page.assetId, page.fit || 'cover');
+        drawMediaPlaceholder(ctx, canvas, {
+          label: 'IMAGE',
+          line1: 'image: ' + (page.assetId || 'missing-asset-id'),
+          line2: 'fit: ' + (page.fit || 'cover'),
+        });
       } else if (kind === 'video') {
-        drawMediaPlaceholder(ctx, canvas, 'VIDEO', page.poster || page.assetId, '#3f1d5a');
-        if (page.poster) drawImageAsync(canvas, page.poster, 'cover');
+        drawMediaPlaceholder(ctx, canvas, {
+          label: 'VIDEO',
+          line1: 'asset: ' + (page.assetId || 'missing-asset-id'),
+          line2: 'video poster: ' + (page.poster || 'missing-poster'),
+        });
       } else if (kind === 'embed') {
-        drawMediaPlaceholder(ctx, canvas, 'EMBED', page.poster, '#1f4d3b');
-        if (page.poster) drawImageAsync(canvas, page.poster, 'cover');
+        const src = page.source && page.source.type === 'asset'
+          ? 'embed asset: ' + page.source.assetId
+          : 'embed url: ' + ((page.source && page.source.url) || 'missing-url');
+        drawMediaPlaceholder(ctx, canvas, {
+          label: 'EMBED',
+          line1: src,
+          line2: 'poster: ' + (page.poster || 'missing-poster'),
+        });
       } else {
         drawTextPage(ctx, canvas, { kind: 'text', title: 'Unsupported page', body: 'Unknown page type.' });
+      }
+
+      if (DEBUG_MODE) {
+        drawDebugOverlay(ctx, page);
       }
 
       ctx.restore();
@@ -85,62 +102,74 @@ function buildEngineHtml(slug: string): string {
       ctx.globalAlpha = 1;
     }
 
-    function drawMediaPlaceholder(ctx, canvas, label, assetId, bgColor) {
-      ctx.fillStyle = bgColor;
+    function drawMediaPlaceholder(ctx, canvas, opts) {
+      const label = opts.label;
+      const line1 = opts.line1;
+      const line2 = opts.line2;
+
+      const g = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+      g.addColorStop(0, '#f4f2ec');
+      g.addColorStop(1, '#ddd7c9');
+      ctx.fillStyle = g;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      const glow = ctx.createRadialGradient(280, 220, 20, 280, 220, 800);
-      glow.addColorStop(0, 'rgba(255,255,255,0.22)');
+      const glow = ctx.createRadialGradient(240, 190, 20, 240, 190, 780);
+      glow.addColorStop(0, 'rgba(255,255,255,0.26)');
       glow.addColorStop(1, 'rgba(255,255,255,0)');
       ctx.fillStyle = glow;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.fillStyle = '#222';
       ctx.font = '700 58px Georgia, serif';
       ctx.fillText(label + ' PAGE', 88, 180);
 
-      drawCard(ctx, 88, 260, 1024, 180, '#ffffff', true, 'Asset ID', assetId || 'missing-asset-id');
-      drawCard(ctx, 88, 470, 1024, 180, '#ffffff', true, 'Path A Placeholder', 'Poster/asset texture only for Prompt 2.');
+      drawCard(ctx, 88, 260, 1024, 180, '#2b2b2b', false, 'Reference', line1 || 'n/a');
+      drawCard(ctx, 88, 470, 1024, 180, '#2b2b2b', false, 'Notes', line2 || 'Path A placeholder texture');
     }
 
-    function drawImageAsync(canvas, assetId, fit) {
-      const ctx = canvas.getContext('2d');
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        const padX = 88;
-        const padY = 700;
-        const frameW = canvas.width - 176;
-        const frameH = canvas.height - 840;
-        const srcW = img.width;
-        const srcH = img.height;
+    function drawDebugOverlay(ctx, page) {
+      const meta = page.__meta || {};
+      const lines = [
+        'DEBUG MODE',
+        'id: ' + (meta.id || 'n/a'),
+        'position: ' + (meta.position ?? 'n/a'),
+        'side: ' + (meta.side || 'n/a'),
+        'kind: ' + (page.kind || 'n/a'),
+      ];
 
-        let drawW = frameW;
-        let drawH = frameH;
-        if (fit === 'contain') {
-          const ratio = Math.min(frameW / srcW, frameH / srcH);
-          drawW = srcW * ratio;
-          drawH = srcH * ratio;
-        } else {
-          const ratio = Math.max(frameW / srcW, frameH / srcH);
-          drawW = srcW * ratio;
-          drawH = srcH * ratio;
-        }
+      if (page.kind === 'image') lines.push('assetId: ' + (page.assetId || 'n/a'));
+      if (page.kind === 'video') {
+        lines.push('assetId: ' + (page.assetId || 'n/a'));
+        lines.push('poster: ' + (page.poster || 'n/a'));
+      }
+      if (page.kind === 'embed') {
+        const src = page.source && page.source.type === 'asset'
+          ? page.source.assetId
+          : (page.source && page.source.url) || 'n/a';
+        lines.push('source: ' + src);
+        lines.push('poster: ' + (page.poster || 'n/a'));
+      }
 
-        const dx = padX + (frameW - drawW) / 2;
-        const dy = padY + (frameH - drawH) / 2;
+      const x = 72;
+      const y = 1240;
+      const w = 1050;
+      const h = 300;
+      ctx.save();
+      roundRect(ctx, x, y, w, h, 24);
+      ctx.fillStyle = 'rgba(15, 15, 15, 0.82)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
 
-        ctx.save();
-        ctx.beginPath();
-        roundRect(ctx, padX, padY, frameW, frameH, 28);
-        ctx.clip();
-        ctx.drawImage(img, dx, dy, drawW, drawH);
-        ctx.restore();
-
-        const texture = pageTextures.find((t) => t.image === canvas);
-        if (texture) texture.needsUpdate = true;
-      };
-      img.src = getAssetUrl(assetId || 'missing-asset-id');
+      ctx.fillStyle = '#f3f3f3';
+      ctx.font = "700 28px 'Helvetica Neue', sans-serif";
+      let cy = y + 48;
+      for (const line of lines.slice(0, 9)) {
+        ctx.fillText(line, x + 24, cy);
+        cy += 32;
+      }
+      ctx.restore();
     }
   `;
 
@@ -154,10 +183,10 @@ function buildEngineHtml(slug: string): string {
     }
     function drawCard(ctx, x, y, w, h, textColor, light, title, body) {
       ctx.save(); roundRect(ctx, x, y, w, h, 42);
-      ctx.fillStyle = light ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.045)'; ctx.fill();
-      ctx.globalAlpha = light ? 0.4 : 0.14; ctx.strokeStyle = textColor; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = light ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.05)'; ctx.fill();
+      ctx.globalAlpha = light ? 0.4 : 0.16; ctx.strokeStyle = textColor; ctx.lineWidth = 2; ctx.stroke();
       ctx.globalAlpha = 1; ctx.fillStyle = textColor; ctx.font = '700 34px Georgia, serif'; ctx.fillText(title, x + 34, y + 62);
-      ctx.globalAlpha = light ? 0.8 : 0.62; ctx.font = "400 27px 'Helvetica Neue', sans-serif"; wrapText(ctx, body, x + 34, y + 116, w - 72, 38); ctx.restore();
+      ctx.globalAlpha = light ? 0.8 : 0.72; ctx.font = "400 27px 'Helvetica Neue', sans-serif"; wrapText(ctx, body, x + 34, y + 116, w - 72, 38); ctx.restore();
     }
     function roundRect(ctx, x, y, w, h, r) {
       ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
@@ -186,11 +215,23 @@ function buildEngineHtml(slug: string): string {
           .map((page, idx) => ({
             ...page.content,
             num: idx + 1,
-            fit: page.content.fit || 'cover'
+            fit: page.content.fit || 'cover',
+            __meta: {
+              id: page.id,
+              position: page.position,
+              side: page.side,
+            },
           }));
 
         if (pages.length % 2 === 1) {
-          pages.push({ kind: 'text', title: ' ', body: ' ', num: pages.length + 1, align: 'left' });
+          pages.push({
+            kind: 'text',
+            title: ' ',
+            body: ' ',
+            num: pages.length + 1,
+            align: 'left',
+            __meta: { id: 'padding-page', position: pages.length, side: 'right' },
+          });
         }
 
         spreadIndex = 0;
@@ -211,7 +252,6 @@ function buildEngineHtml(slug: string): string {
     boot
   );
 
-  // Hide PDF loader for Prompt 2 data-driven mode.
   html = html.replace("<div class=\"pdf-loader\">", "<div class=\"pdf-loader\" style=\"display:none\">\n");
 
   return html;
@@ -221,9 +261,10 @@ interface Params {
   params: Promise<{ slug: string }>;
 }
 
-export async function GET(_: Request, { params }: Params) {
+export async function GET(request: Request, { params }: Params) {
   const { slug } = await params;
-  const html = buildEngineHtml(slug);
+  const debug = new URL(request.url).searchParams.get("debug") === "1";
+  const html = buildEngineHtml(slug, debug);
 
   return new NextResponse(html, {
     headers: {

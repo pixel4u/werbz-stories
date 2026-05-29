@@ -1,13 +1,21 @@
 "use client";
 
 import { useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 
 interface BookViewerProps {
   slug: string;
 }
 
 export function BookViewer({ slug }: BookViewerProps) {
-  const src = useMemo(() => `/api/book/${encodeURIComponent(slug)}`, [slug]);
+  const searchParams = useSearchParams();
+
+  const src = useMemo(() => {
+    const base = `/api/book/${encodeURIComponent(slug)}`;
+    const debug = searchParams.get("debug");
+    if (debug === "1") return `${base}?debug=1`;
+    return base;
+  }, [slug, searchParams]);
 
   return (
     <iframe
