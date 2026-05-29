@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import {
@@ -179,6 +180,20 @@ export default async function StudioPage({
               </form>
 
               <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                <Link
+                  href={`/studio/${book.id}`}
+                  style={{
+                    padding: "0.5rem 0.8rem",
+                    cursor: "pointer",
+                    border: "1px solid #ddd",
+                    borderRadius: 6,
+                    textDecoration: "none",
+                    color: "inherit",
+                  }}
+                >
+                  Edit Pages
+                </Link>
+
                 <form action={togglePublishAction}>
                   <input type="hidden" name="id" value={book.id} />
                   <input type="hidden" name="nextStatus" value={nextStatus} />

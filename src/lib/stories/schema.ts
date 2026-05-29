@@ -36,7 +36,7 @@ export const TextContent = z.object({
   eyebrow: z.string().max(80).optional(), // e.g. "CHAPTER ONE"
   title: z.string().max(160).optional(),
   body: z.string().max(4000).optional(), // plain text or limited markdown
-  align: z.enum(["left", "center"]).default("left"),
+  align: z.enum(["left", "center", "right"]).default("left"),
   // visual treatment of the paper itself (still neutral-lit by the shader)
   background: z.string().regex(/^#([0-9a-fA-F]{6})$/).optional(), // solid color page
 });

@@ -82,7 +82,7 @@ function buildEngineHtml(slug: string, debug: boolean): string {
       ctx.font = '700 34px Georgia, serif';
       ctx.fillText((page.eyebrow || '').toUpperCase(), 86, 150);
 
-      const align = page.align === 'center' ? 'center' : 'left';
+      const align = page.align === 'center' ? 'center' : page.align === 'right' ? 'right' : 'left';
       const titleX = align === 'center' ? canvas.width / 2 : 86;
       const bodyX = align === 'center' ? canvas.width / 2 : 88;
       const maxWidth = 900;
