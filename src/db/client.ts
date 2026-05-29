@@ -1,12 +1,17 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
-const connectionString = process.env.DATABASE_URL;
+let cachedDb: ReturnType<typeof drizzle> | null = null;
 
-if (!connectionString) {
-  throw new Error("DATABASE_URL is required");
+export function getDb() {
+  if (cachedDb) return cachedDb;
+
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error("DATABASE_URL is required");
+  }
+
+  const client = postgres(connectionString, { prepare: false });
+  cachedDb = drizzle(client);
+  return cachedDb;
 }
-
-const client = postgres(connectionString, { prepare: false });
-
-export const db = drizzle(client);

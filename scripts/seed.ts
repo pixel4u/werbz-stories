@@ -1,12 +1,13 @@
 import "dotenv/config";
 import { sql } from "drizzle-orm";
 import { eq } from "drizzle-orm";
-import { db } from "../src/db/client";
+import { getDb } from "../src/db/client";
 import { assets, pages, storybooks } from "../src/db/schema";
 import sample from "../specs/sample-storybook.json";
 import { parseStorybook } from "../src/lib/stories/schema";
 
 async function upsertAssetId(id: string) {
+  const db = getDb();
   await db
     .insert(assets)
     .values({
@@ -19,6 +20,7 @@ async function upsertAssetId(id: string) {
 }
 
 async function main() {
+  const db = getDb();
   const storybook = parseStorybook(sample);
 
   const assetIds = new Set<string>();

@@ -118,7 +118,7 @@ export const Storybook = z.object({
   status: StorybookStatus.default("draft"),
   // OPTIONAL per-book look. If present, overrides the Book's default config.
   // This is exactly the JSON your "Copy config" button already exports.
-  theme: z.record(z.any()).optional(),
+  theme: z.record(z.string(), z.any()).optional(),
   pages: z.array(Page),
   createdAt: z.string(), // ISO
   updatedAt: z.string(),

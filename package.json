@@ -12,22 +12,23 @@
     "db:seed": "tsx scripts/seed.ts"
   },
   "dependencies": {
-    "drizzle-orm": "^0.44.2",
+    "drizzle-orm": "^0.45.2",
     "next": "16.2.6",
-    "postgres": "^3.4.7",
+    "postgres": "^3.4.9",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "zod": "^4.1.12"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "dotenv": "^17.2.3",
-    "drizzle-kit": "^0.31.7",
+    "dotenv": "^17.4.2",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
-    "tsx": "^4.20.6",
+    "eslint-plugin-import": "^2.32.0",
+    "tsx": "^4.22.3",
     "typescript": "^5"
   },
   "packageManager": "pnpm@10.33.0+sha512.10568bb4a6afb58c9eb3630da90cc9516417abebd3fabbe6739f0ae795728da1491e9db5a544c76ad8eb7570f5c4bb3d6c637b2cb41bfdcdb47fa823c8649319"

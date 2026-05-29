@@ -1,64 +1,80 @@
 # werbz-stories
 
-Standalone Stories platform for `werbz.com`, built with Next.js App Router, PostgreSQL, and Drizzle ORM.
+Standalone Stories platform for `werbz.com` using Next.js App Router, PostgreSQL, and Drizzle ORM.
 
-## Milestone 1 Scope
+## Prompt 1 Foundation Included
 
-- Fresh standalone app scaffold
-- Shared stories schema from specs
-- Drizzle schema + migration scaffold
-- Idempotent seed script using `specs/sample-storybook.json`
-- Placeholder routes:
-  - `/` public Stories library placeholder
-  - `/studio` Studio placeholder
-  - `/[slug]` viewer placeholder
+- Shared schema: `src/lib/stories/schema.ts`
+- DB schema/client: `src/db/schema.ts`, `src/db/client.ts`
+- Drizzle config + migration: `drizzle.config.ts`, `drizzle/`
+- Idempotent seed: `scripts/seed.ts`
+- Read repository functions:
+  - `getStorybookBySlug(slug)`
+  - `listPublishedStorybooks()`
+- Public read endpoints:
+  - `GET /api/storybooks`
+  - `GET /api/storybooks/[slug]`
 
-## Prerequisites
+## Environment
 
-- Node.js 20+
-- pnpm 10+
-- PostgreSQL 15+
-
-## Local setup
-
-1. Install dependencies:
-
-```bash
-pnpm install
-```
-
-2. Create `.env`:
+Create `.env`:
 
 ```bash
 cp .env.example .env
 ```
 
-3. Set `DATABASE_URL` in `.env`.
+Required vars:
 
-4. Run migration SQL (choose one):
+- `DATABASE_URL` (PostgreSQL connection string)
+
+Example is provided in `.env.example`.
+
+## Run
+
+Install:
+
+```bash
+pnpm install
+```
+
+Generate migrations from schema:
+
+```bash
+pnpm db:generate
+```
+
+Apply migrations:
 
 ```bash
 pnpm db:migrate
 ```
 
-or manually apply `drizzle/0000_initial_stories.sql` in Postgres.
-
-5. Seed sample data:
+Seed sample storybook (safe to run repeatedly):
 
 ```bash
 pnpm db:seed
 ```
 
-6. Run the app:
+Start app:
 
 ```bash
 pnpm dev
 ```
 
-Open `http://localhost:3000`.
+## Quick checks
+
+- Routes:
+  - `/`
+  - `/studio`
+  - `/the-lighthouse`
+- API:
+  - `/api/storybooks`
+  - `/api/storybooks/the-lighthouse`
+- DB:
+  - `select * from storybooks;`
 
 ## Notes
 
-- Source-of-truth specs are in `specs/`.
-- Book engine reference for later integration is `specs/book-engine-v27.html`.
-- This milestone does not implement the full editor or deploy flow yet.
+- Asset IDs are text IDs (for example `asset-cover-lighthouse`), not UUID-only.
+- `assets.id` is `text` PK.
+- `storybooks.cover_asset_id` is a `text` FK to `assets.id`.

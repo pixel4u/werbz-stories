@@ -1,7 +1,7 @@
 /**
- * ReallyVibrant Stories — Drizzle schema (PostgreSQL)
+ * werbz Stories — Drizzle schema (PostgreSQL)
  * ----------------------------------------------------
- * Path suggestion: packages/db/src/schema/stories.ts
+ * Path suggestion: src/db/schema.ts
  *
  * Design notes:
  *  - `pages.content` is jsonb holding the `PageContent` union from
@@ -28,6 +28,17 @@ import {
 export const storybookStatus = pgEnum("storybook_status", ["draft", "published"]);
 export const pageSide = pgEnum("page_side", ["left", "right"]);
 
+/* ── Assets (images, video, embed bundles, posters) ─────────── */
+export const assets = pgTable("assets", {
+  id: text("id").primaryKey(),
+  storageKey: text("storage_key").notNull(), // R2 / uploads path
+  mimeType: text("mime_type").notNull(),
+  bytes: integer("bytes").notNull(),
+  width: integer("width"),
+  height: integer("height"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 /* ── Storybooks ─────────────────────────────────────────────── */
 export const storybooks = pgTable(
   "storybooks",
@@ -36,7 +47,7 @@ export const storybooks = pgTable(
     slug: text("slug").notNull(),
     title: text("title").notNull(),
     summary: text("summary"),
-    coverAssetId: uuid("cover_asset_id"),
+    coverAssetId: text("cover_asset_id").references(() => assets.id, { onDelete: "set null" }),
     status: storybookStatus("status").notNull().default("draft"),
     theme: jsonb("theme"), // optional per-book Book config (your Copy-config JSON)
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -52,7 +63,7 @@ export const storybooks = pgTable(
 export const pages = pgTable(
   "pages",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: text("id").primaryKey(),
     storybookId: uuid("storybook_id")
       .notNull()
       .references(() => storybooks.id, { onDelete: "cascade" }),
@@ -64,17 +75,6 @@ export const pages = pgTable(
     bookOrderIdx: index("pages_book_position_idx").on(t.storybookId, t.position),
   })
 );
-
-/* ── Assets (images, video, embed bundles, posters) ─────────── */
-export const assets = pgTable("assets", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  storageKey: text("storage_key").notNull(), // R2 / uploads path
-  mimeType: text("mime_type").notNull(),
-  bytes: integer("bytes").notNull(),
-  width: integer("width"),
-  height: integer("height"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
 
 /* ── Viewers (audience email capture, OTP gate) ─────────────── */
 export const viewers = pgTable(
