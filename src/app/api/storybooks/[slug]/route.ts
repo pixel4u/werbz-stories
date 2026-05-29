@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getStorybookBySlug } from "@/lib/stories/repository";
+import { getPublishedStorybookBySlug } from "@/lib/stories/repository";
 
 interface Params {
   params: Promise<{ slug: string }>;
@@ -8,7 +8,7 @@ interface Params {
 
 export async function GET(_: Request, { params }: Params) {
   const { slug } = await params;
-  const storybook = await getStorybookBySlug(slug);
+  const storybook = await getPublishedStorybookBySlug(slug);
 
   if (!storybook) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });

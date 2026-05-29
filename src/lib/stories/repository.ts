@@ -51,6 +51,12 @@ export async function getStorybookBySlug(slug: string): Promise<Storybook | null
   return parseStorybook(storybook);
 }
 
+export async function getPublishedStorybookBySlug(slug: string): Promise<Storybook | null> {
+  const storybook = await getStorybookBySlug(slug);
+  if (!storybook) return null;
+  return storybook.status === "published" ? storybook : null;
+}
+
 export async function listPublishedStorybooks(): Promise<StorybookListItemType[]> {
   const db = getDb();
   const rows = await db
