@@ -1,0 +1,96 @@
+{
+  "id": "11111111-1111-1111-1111-111111111111",
+  "slug": "the-lighthouse",
+  "title": "The Lighthouse",
+  "summary": "A three-spread demo: text, a solid-color page, an image, and a live animation leaf.",
+  "coverAssetId": "asset-cover-lighthouse",
+  "status": "published",
+  "theme": {
+    "camHeight": 9.85,
+    "camTilt": 1.05,
+    "fov": 30,
+    "exposure": 1.02,
+    "spineColor": "#a39a8c",
+    "stackThickness": 0.42,
+    "restCurl": 0.05,
+    "curlStrength": 0.4,
+    "pageSag": 0.09,
+    "flipDuration": 0.88
+  },
+  "pages": [
+    {
+      "id": "p0",
+      "position": 0,
+      "side": "left",
+      "content": {
+        "kind": "text",
+        "eyebrow": "CHAPTER ONE",
+        "title": "Beginnings",
+        "body": "Every book starts somewhere. The keeper climbed the stairs as he had every night for thirty years.",
+        "align": "left"
+      }
+    },
+    {
+      "id": "p1",
+      "position": 1,
+      "side": "right",
+      "content": {
+        "kind": "image",
+        "assetId": "asset-lighthouse-night",
+        "fit": "cover",
+        "caption": "The light, still turning."
+      }
+    },
+    {
+      "id": "p2",
+      "position": 2,
+      "side": "left",
+      "content": {
+        "kind": "text",
+        "eyebrow": "COLOR TEST",
+        "title": "A Field of Blue",
+        "body": "A solid background page, to show how the curl shading and rim sheen read across saturated color.",
+        "background": "#1f4fd6",
+        "align": "left"
+      }
+    },
+    {
+      "id": "p3",
+      "position": 3,
+      "side": "right",
+      "content": {
+        "kind": "embed",
+        "source": { "type": "asset", "assetId": "asset-wave-animation-bundle" },
+        "poster": "asset-wave-poster",
+        "interactive": true
+      }
+    },
+    {
+      "id": "p4",
+      "position": 4,
+      "side": "left",
+      "content": {
+        "kind": "video",
+        "assetId": "asset-sea-clip",
+        "poster": "asset-sea-poster",
+        "autoplay": true,
+        "loop": true,
+        "muted": true
+      }
+    },
+    {
+      "id": "p5",
+      "position": 5,
+      "side": "right",
+      "content": {
+        "kind": "text",
+        "eyebrow": "APPENDIX",
+        "title": "The End",
+        "body": "Swap loadPageTexture() for the renderers in the plan and these placeholders become a real, live storybook.",
+        "align": "center"
+      }
+    }
+  ],
+  "createdAt": "2026-05-29T00:00:00.000Z",
+  "updatedAt": "2026-05-29T00:00:00.000Z"
+}
