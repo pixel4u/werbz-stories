@@ -24,8 +24,8 @@ function buildEngineHtml(slug: string, debug: boolean): string {
   const renderers = `
     function drawNeutralPaper(ctx, canvas) {
       const g = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-      g.addColorStop(0, '#f4f2ec');
-      g.addColorStop(1, '#ddd7c9');
+      g.addColorStop(0, '#ffffff');
+      g.addColorStop(1, '#f3f3f3');
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
@@ -275,29 +275,6 @@ function buildEngineHtml(slug: string, debug: boolean): string {
   );
 
   const boot = `
-    let coverModeActive = false;
-    let coverPageInserted = false;
-    function enterCoverMode() {
-      coverModeActive = true;
-      spreadIndex = 0;
-      cleanupActiveFlip();
-      regenerateTextures();
-      buildBook();
-      if (leftPageMesh) leftPageMesh.visible = false;
-      if (rightPageMesh) rightPageMesh.visible = true;
-      if (statusText) statusText.textContent = 'Cover';
-      if (prevBtn) prevBtn.disabled = true;
-    }
-
-    function openFromCover() {
-      coverModeActive = false;
-      spreadIndex = 1;
-      cleanupActiveFlip();
-      regenerateTextures();
-      buildBook();
-      updateStatus();
-    }
-
     async function loadStorybookFromApi() {
       try {
         const res = await fetch('/api/storybooks/${slug}');
@@ -326,22 +303,28 @@ function buildEngineHtml(slug: string, debug: boolean): string {
             },
           }));
 
-        const coverAssetId = storybook.coverAssetId || (pages[0] && pages[0].kind === 'image' ? pages[0].assetId : null);
-        if (coverAssetId) {
-          coverPageInserted = true;
+        // If the storybook defines a dedicated cover image and the first page is
+        // not already that image, prepend it as page 0 (the closed front cover).
+        const coverAssetId = storybook.coverAssetId;
+        const firstIsCover = pages[0] && pages[0].kind === 'image' && pages[0].assetId === coverAssetId;
+        if (coverAssetId && !firstIsCover) {
           pages.unshift({
             kind: 'image',
             assetId: coverAssetId,
             fit: 'cover',
             num: 0,
-            __meta: { id: 'cover-page', position: -1, side: 'right' },
+            __meta: { id: 'cover-page', position: -1, side: 'left' },
           });
         }
 
+        // Page turns happen in pairs, so an odd page count needs one trailing
+        // blank. The back cover is the last page; pad before it so the cover
+        // stays a real content page.
         if (pages.length % 2 === 1) {
-          const last = pages[pages.length - 1] || { kind: 'text', title: ' ', body: ' ' };
           pages.push({
-            ...last,
+            kind: 'text',
+            title: '',
+            body: '',
             num: pages.length + 1,
             __meta: { id: 'padding-page', position: pages.length, side: 'right' },
           });
@@ -351,26 +334,8 @@ function buildEngineHtml(slug: string, debug: boolean): string {
         cleanupActiveFlip();
         regenerateTextures();
         buildBook();
-        if (coverPageInserted) {
-          enterCoverMode();
-        }
-
-        const baseGoNext = goNext;
-        const baseGoPrevious = goPrevious;
-        goNext = function() {
-          if (coverModeActive) {
-            openFromCover();
-            return;
-          }
-          baseGoNext();
-        };
-        goPrevious = function() {
-          if (!coverModeActive && coverPageInserted && spreadIndex <= 1 && !isAnimating) {
-            enterCoverMode();
-            return;
-          }
-          baseGoPrevious();
-        };
+        // The engine starts closed on the front cover natively.
+        enterCover('front');
       } catch (err) {
         console.error(err);
       }

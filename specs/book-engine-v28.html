@@ -131,7 +131,7 @@
     const DEFAULTS = {
       flipTextH: false, flipTextV: true,
       camHeight: 9.85, camTilt: 1.05, fov: 30, exposure: 1.02,
-      showSpine: true, spineRadius: 0.012, spineColor: "#a39a8c",
+      showSpine: true, spineRadius: 0.012, spineColor: "#b8b8b8",
       // Default view keeps the clean page artwork, while gutter/page-edge depth stays visible.
       showGutter: true, gutterWidth: 0.65, gutterOpacity: 0.29, gutterSoftness: 0.88,
       showCover: true,
@@ -145,24 +145,33 @@
     const PAGE_W = 2.35, PAGE_H = 3.2, SEG_X = 64, SEG_Z = 72, PAPER_THICKNESS = 0.012;
     const RES_X = 16, RES_Z = 20;
 
-    // Demo content: clear chapter + title; one solid-color page (#3).
+    // Demo content: clean white pages. Real pages are injected by the host app.
     let pages = [
       { chapter: "CHAPTER ONE", title: "Beginnings", num: 1,
         body: "Every book starts somewhere. Watch how the paper bends and settles as you turn the pages." },
       { chapter: "CHAPTER ONE", title: "The Quiet Page", num: 2,
         body: "Plain paper, dark ink. Neutral lighting keeps the shadows gray, like a real book under white light." },
-      { chapter: "COLOR TEST", title: "Solid Background", num: 3, bg: "#1f4fd6",
-        body: "A flat blue field, to show how the curl shading, rim sheen and gutter shadow read across saturated color or imagery." },
-      { chapter: "CHAPTER TWO", title: "Layers & Depth", num: 4,
+      { chapter: "CHAPTER TWO", title: "Layers & Depth", num: 3,
         body: "As a sheet lifts, the page beneath it darkens slightly — selling the sense of stacked, separate sheets." },
-      { chapter: "CHAPTER TWO", title: "Turning Pages", num: 5,
+      { chapter: "CHAPTER TWO", title: "Turning Pages", num: 4,
         body: "Drag from either edge, tap an arrow, or use the keyboard. The turn settles with a soft cross-fade." },
-      { chapter: "APPENDIX", title: "PDF Ready", num: 6,
-        body: "Swap loadPageTexture() for a pdf.js page render and these placeholders become a real document." }
+      { chapter: "APPENDIX", title: "PDF Ready", num: 5,
+        body: "Swap loadPageTexture() for a pdf.js page render and these placeholders become a real document." },
+      { chapter: "APPENDIX", title: "The End", num: 6,
+        body: "The back cover closes the book the same way the front cover opened it." }
     ];
 
     let spreadIndex = 0, isAnimating = false, dragDirection = null, progress = 0;
     let isDragging = false, pointerDown = false, dragStartX = 0, pendingDir = null;
+
+    /* ====== Closed-book (cover) state ======
+       coverMode: when true, the book is rendered as a single closed page
+       (front cover or back cover) showing only half the spread width, with the
+       book shifted so that single page sits centered. "open to spread" slides
+       the book back to the full two-page layout. */
+    let coverMode = false;        // is a cover (closed) currently shown
+    let coverSide = "front";      // "front" => show right page, "back" => show left page
+    let coverEnabled = true;      // host can disable the closed-book effect
 
     const scene = new THREE.Scene(); scene.background = null;
     const camera = new THREE.PerspectiveCamera(config.fov, window.innerWidth / window.innerHeight, 0.1, 100);
@@ -355,7 +364,7 @@
         ctx.fillStyle = page.bg; ctx.fillRect(0, 0, canvas.width, canvas.height);
       } else {
         const g = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-        g.addColorStop(0, "#ffffff"); g.addColorStop(0.58, "#ffffff"); g.addColorStop(1, "#fbfaf7");
+        g.addColorStop(0, "#ffffff"); g.addColorStop(0.58, "#ffffff"); g.addColorStop(1, "#f6f6f6");
         ctx.fillStyle = g; ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
 
@@ -534,13 +543,13 @@
 
     function createStackMesh(side) {
       const sign = side === "right" ? 1 : -1, t = config.stackThickness;
-      const material = new THREE.MeshStandardMaterial({ color: side==="right"?0xf3ead9:0xe8ddcb, roughness: 0.92, metalness: 0 });
+      const material = new THREE.MeshStandardMaterial({ color: side==="right"?0xe8e8e8:0xdedede, roughness: 0.92, metalness: 0 });
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(PAGE_W, t, PAGE_H), material);
       mesh.position.set(sign*PAGE_W/2, -t/2 - 0.035, 0); mesh.castShadow = true; mesh.receiveShadow = true; return mesh;
     }
     function createPaperLayerLines(side) {
       const sign = side === "right" ? 1 : -1, group = new THREE.Group(), t = config.stackThickness;
-      const lineMat = new THREE.LineBasicMaterial({ color: 0x9a8f7d, transparent: true, opacity: config.layerOpacity });
+      const lineMat = new THREE.LineBasicMaterial({ color: 0xb0b0b0, transparent: true, opacity: config.layerOpacity });
       for (let i = 0; i < 18; i++) { const y = -0.035 - (i / 18) * t;
         const pts = [ new THREE.Vector3(sign*0.06,y,-PAGE_H/2), new THREE.Vector3(sign*PAGE_W,y,-PAGE_H/2), new THREE.Vector3(sign*PAGE_W,y,PAGE_H/2), new THREE.Vector3(sign*0.06,y,PAGE_H/2) ];
         group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMat)); }
@@ -549,7 +558,7 @@
     function createCoverBase() {
       const t = config.stackThickness;
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(PAGE_W*2 + 0.18, 0.07, PAGE_H + 0.18),
-        new THREE.MeshStandardMaterial({ color: 0x2a2f3a, roughness: 0.7, metalness: 0.05 }));
+        new THREE.MeshStandardMaterial({ color: 0xcfcfcf, roughness: 0.7, metalness: 0.05 }));
       mesh.position.set(0, -t - 0.095, 0); mesh.castShadow = true; mesh.receiveShadow = true; return mesh;
     }
     function createSpine() {
@@ -635,11 +644,89 @@
       if (config.showGutter) bookGroup.add(gutterShadow);
       if (config.showSpine) bookGroup.add(spineMesh);
       keepGutterVisible();
+      applyCoverLayout(false);
       updateStatus();
     }
     function updateStatus() {
+      if (coverMode) {
+        statusText.textContent = coverSide === "front" ? "Cover" : "The End";
+        prevBtn.disabled = coverSide === "front";
+        nextBtn.disabled = coverSide === "back";
+        return;
+      }
       statusText.textContent = "Pages " + (spreadIndex + 1) + "\u2013" + Math.min(spreadIndex + 2, pages.length);
       prevBtn.disabled = spreadIndex === 0; nextBtn.disabled = spreadIndex >= pages.length - 2;
+    }
+
+    /* ---------------- Closed-book / cover layout ---------------- */
+    // Snap the book to the closed (single-page, centered) or open (full spread)
+    // layout. When closed, the visible cover page is the only sheet shown and
+    // the whole book is shifted so that page sits in the middle of the screen.
+    function applyCoverLayout(animated) {
+      // Front cover = first page, which lives on the LEFT of the opening spread,
+      // so closed we show the left page and shift the book right to center it.
+      // Back cover = last page, on the RIGHT of the final spread, so we show the
+      // right page and shift the book left to center it.
+      const targetShift = coverMode ? (coverSide === "front" ? PAGE_W / 2 : -PAGE_W / 2) : 0;
+      const showLeft = !coverMode || coverSide === "front";
+      const showRight = !coverMode || coverSide === "back";
+
+      if (leftPageMesh) leftPageMesh.visible = showLeft;
+      if (rightPageMesh) rightPageMesh.visible = showRight;
+      if (leftStack) leftStack.visible = showLeft;
+      if (rightStack) rightStack.visible = showRight;
+      if (leftStackLines) leftStackLines.visible = showLeft;
+      if (rightStackLines) rightStackLines.visible = showRight;
+      // The center seam (spine + gutter) only reads inside an open book.
+      if (spineMesh) spineMesh.visible = !coverMode && config.showSpine;
+      if (gutterShadow) gutterShadow.visible = !coverMode && config.showGutter;
+
+      if (animated && gsapInstance) {
+        gsapInstance.to(bookGroup.position, { x: targetShift, duration: 0.6, ease: "power3.inOut" });
+      } else {
+        bookGroup.position.x = targetShift;
+      }
+    }
+
+    // Enter the closed cover (front at start, back at end).
+    // animated=true plays the close (spread folding shut) when arriving from a spread.
+    function enterCover(side, animated) {
+      if (!coverEnabled) return;
+      coverMode = true;
+      coverSide = side;
+      cleanupActiveFlip();
+      buildBook();              // buildBook() -> applyCoverLayout(false) snaps to closed
+      if (animated) {
+        bookGroup.position.x = 0; // start from the open position, then fold shut
+        applyCoverLayout(true);
+      }
+      updateStatus();
+    }
+
+    // Open the front cover into the first spread, or close from the first spread.
+    function openFrontCover() {
+      if (!coverMode || coverSide !== "front") return;
+      coverMode = false;
+      spreadIndex = 0;
+      buildBook();
+      applyCoverLayout(true);
+      updateStatus();
+    }
+    function closeToFrontCover() {
+      if (coverMode || spreadIndex !== 0) return;
+      enterCover("front", true);
+    }
+    function openBackCover() {
+      if (!coverMode || coverSide !== "back") return;
+      coverMode = false;
+      spreadIndex = Math.max(0, pages.length - 2);
+      buildBook();
+      applyCoverLayout(true);
+      updateStatus();
+    }
+    function closeToBackCover() {
+      if (coverMode) return;
+      enterCover("back", true);
     }
 
     function keepGutterVisible() {
@@ -956,8 +1043,24 @@
       });
     }
 
-    function goNext() { if (isAnimating || spreadIndex >= pages.length - 2) return; if (prepareFlip("next")) completeFlip(); }
-    function goPrevious() { if (isAnimating || spreadIndex === 0) return; if (prepareFlip("previous")) completeFlip(); }
+    function goNext() {
+      if (isAnimating) return;
+      // Closed on the front cover: opening it reveals the first spread.
+      if (coverMode && coverSide === "front") { openFrontCover(); return; }
+      if (coverMode) return; // back cover is the end; nothing past it
+      // On the last spread: close the book onto its back cover.
+      if (spreadIndex >= pages.length - 2) { if (coverEnabled) closeToBackCover(); return; }
+      if (prepareFlip("next")) completeFlip();
+    }
+    function goPrevious() {
+      if (isAnimating) return;
+      // Closed on the back cover: opening it returns to the last spread.
+      if (coverMode && coverSide === "back") { openBackCover(); return; }
+      if (coverMode) return; // front cover is the start; nothing before it
+      // On the first spread: close the book onto its front cover.
+      if (spreadIndex === 0) { if (coverEnabled) closeToFrontCover(); return; }
+      if (prepareFlip("previous")) completeFlip();
+    }
 
     /* ---------------- Drag-to-flip ---------------- */
     function getClientX(e) {
@@ -970,11 +1073,15 @@
       const x = getClientX(e);
       pointerDown = true; dragStartX = x; pendingDir = x > window.innerWidth / 2 ? "next" : "previous";
     }
+    let pendingCoverAction = null; // cover open/close gesture resolved on release
     function moveDrag(e) {
       if (isAnimating) return;
       const x = getClientX(e);
-      if (pointerDown && !isDragging) {
+      if (pointerDown && !isDragging && !pendingCoverAction) {
         if (Math.abs(x - dragStartX) < 6) return;       // ignore tiny clicks
+        // Cover transitions are not page flips: route the gesture to open/close.
+        const action = resolveCoverGesture(pendingDir);
+        if (action) { pendingCoverAction = action; pointerDown = false; e.preventDefault(); return; }
         if (!prepareFlip(pendingDir)) { pointerDown = false; return; }
         isDragging = true;
       }
@@ -984,8 +1091,18 @@
       deformActivePage(Math.pow(THREE.MathUtils.clamp(raw, 0, 1), 0.85));
       e.preventDefault();
     }
+    // Returns a cover open/close function if the gesture maps to one, else null.
+    function resolveCoverGesture(dir) {
+      if (!coverEnabled) return null;
+      if (coverMode && coverSide === "front" && dir === "next") return openFrontCover;
+      if (coverMode && coverSide === "back" && dir === "previous") return openBackCover;
+      if (!coverMode && dir === "next" && spreadIndex >= pages.length - 2) return closeToBackCover;
+      if (!coverMode && dir === "previous" && spreadIndex === 0) return closeToFrontCover;
+      return null;
+    }
     function endDrag() {
       pointerDown = false;
+      if (pendingCoverAction) { const act = pendingCoverAction; pendingCoverAction = null; act(); return; }
       if (!isDragging || isAnimating || !dragDirection) return;
       if (progress > 0.4) completeFlip(); else cancelFlip();
     }
@@ -1129,6 +1246,8 @@
     if (initialPdfUrl) document.getElementById("pdfUrlInput").value = initialPdfUrl;
 
     buildUI(); syncJson(); applyCamera(); applyLights(); regenerateTextures(); buildBook(); animate();
+    // Start closed on the front cover (folded book) by default.
+    enterCover("front");
 
     if (initialPdfUrl) {
       setTimeout(() => loadPdfFromUrl(initialPdfUrl), 150);
