@@ -132,6 +132,9 @@ export default async function StudioPage({
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
         <h1>Studio</h1>
         <div style={{ display: "flex", gap: "0.5rem" }}>
+          <Link href="/studio/analytics" style={{ padding: "0.6rem 1rem", border: "1px solid #ddd", borderRadius: 6 }}>
+            Analytics
+          </Link>
           <form action={createStorybookAction}>
             <button type="submit" style={{ padding: "0.6rem 1rem", cursor: "pointer" }}>
               New Storybook
