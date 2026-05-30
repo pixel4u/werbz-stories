@@ -39,6 +39,11 @@ export const TextContent = z.object({
   align: z.enum(["left", "center", "right"]).default("left"),
   // visual treatment of the paper itself (still neutral-lit by the shader)
   background: z.string().regex(/^#([0-9a-fA-F]{6})$/).optional(), // solid color page
+  // OPTIONAL background photo drawn behind the text. Used for the cover
+  // ("picture + title") but available on any text page. A dark scrim keeps
+  // the overlaid text readable.
+  backgroundAssetId: z.string().optional(),
+  backgroundFit: z.enum(["cover", "contain"]).optional(),
 });
 export type TextContent = z.infer<typeof TextContent>;
 

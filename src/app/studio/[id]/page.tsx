@@ -9,6 +9,7 @@ import {
   getStudioStorybookById,
   movePageDown,
   movePageUp,
+  removePageImage,
   type StudioPageRow,
   updatePage,
 } from "@/lib/studio-service";
@@ -41,12 +42,55 @@ function contentPreview(content: PageContent): string {
   return `${source} poster=${content.poster}`;
 }
 
-function PageEditFields({ storybookId, page }: { storybookId: string; page: StudioPageRow }) {
+// Submits the SURROUNDING page-edit form (which already carries storybookId +
+// pageId) to the remove action. Using formAction keeps it valid HTML — no
+// nested <form> inside the edit form.
+function RemoveImageButton({
+  action,
+}: {
+  storybookId: string;
+  pageId: string;
+  action: (formData: FormData) => Promise<void>;
+}) {
+  return (
+    <button
+      type="submit"
+      formAction={action}
+      formNoValidate
+      title="Remove photo"
+      style={{
+        border: "1px solid #ef4444",
+        background: "#fff",
+        color: "#ef4444",
+        borderRadius: 8,
+        padding: "0.45rem 0.7rem",
+        cursor: "pointer",
+        fontWeight: 700,
+        whiteSpace: "nowrap",
+      }}
+    >
+      ✕ Remove
+    </button>
+  );
+}
+
+function PageEditFields({
+  storybookId,
+  page,
+  isFrontCover,
+  removeImageAction,
+}: {
+  storybookId: string;
+  page: StudioPageRow;
+  isFrontCover: boolean;
+  removeImageAction: (formData: FormData) => Promise<void>;
+}) {
   if (page.content.kind === "text") {
+    const bgAssetId = page.content.backgroundAssetId || "";
     return (
       <>
         <input name="eyebrow" defaultValue={page.content.eyebrow || ""} placeholder="Eyebrow" style={{ padding: "0.5rem" }} />
-        <input name="title" defaultValue={page.content.title || ""} placeholder="Title" style={{ padding: "0.5rem" }} />
+        <input name="title" defaultValue={page.content.title || ""} placeholder={isFrontCover ? "Cover title" : "Title"} style={{ padding: "0.5rem" }} />
         <textarea name="body" defaultValue={page.content.body || ""} placeholder="Body" rows={4} style={{ padding: "0.5rem" }} />
         <select name="align" defaultValue={page.content.align || "left"} style={{ padding: "0.5rem" }}>
           <option value="left">left</option>
@@ -59,14 +103,46 @@ function PageEditFields({ storybookId, page }: { storybookId: string; page: Stud
           placeholder="Background hex (optional, e.g. #1E3A8A)"
           style={{ padding: "0.5rem" }}
         />
+
+        {/* Optional background photo (used for the cover: picture + title). */}
+        <fieldset style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "0.6rem", margin: 0 }}>
+          <legend style={{ fontSize: 12, color: "#6b7280", padding: "0 0.3rem" }}>
+            {isFrontCover ? "Cover photo (optional)" : "Background photo (optional)"}
+          </legend>
+          <ImageUploadForm
+            storybookId={storybookId}
+            pageId={page.id}
+            currentAssetId={bgAssetId}
+            target="text-background"
+          />
+          <select name="backgroundFit" defaultValue={page.content.backgroundFit || "cover"} style={{ padding: "0.5rem", marginTop: "0.4rem" }}>
+            <option value="cover">cover (fill)</option>
+            <option value="contain">contain (fit)</option>
+          </select>
+          {/* Carry the current photo through the page save; cleared by Remove. */}
+          <input type="hidden" name="backgroundAssetId" defaultValue={bgAssetId} />
+          {bgAssetId ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.4rem" }}>
+              <img
+                src={getAssetUrl(bgAssetId)}
+                alt="Cover photo preview"
+                style={{ width: 150, height: 100, objectFit: "cover", borderRadius: 6, border: "1px solid #e5e7eb" }}
+              />
+              <RemoveImageButton storybookId={storybookId} pageId={page.id} action={removeImageAction} />
+            </div>
+          ) : (
+            <p style={{ margin: "0.3rem 0 0", fontSize: 12, color: "#9ca3af" }}>No photo yet.</p>
+          )}
+        </fieldset>
       </>
     );
   }
 
   if (page.content.kind === "image") {
+    const hasImage = !!page.content.assetId;
     return (
       <>
-        <ImageUploadForm storybookId={storybookId} pageId={page.id} currentAssetId={page.content.assetId} />
+        <ImageUploadForm storybookId={storybookId} pageId={page.id} currentAssetId={page.content.assetId} target="page-image" />
         <p style={{ margin: 0, fontSize: 13, color: "#4b5563" }}>
           Current image asset: <code>{page.content.assetId || "none"}</code>
         </p>
@@ -75,12 +151,15 @@ function PageEditFields({ storybookId, page }: { storybookId: string; page: Stud
           <option value="contain">contain</option>
         </select>
         <input name="caption" defaultValue={page.content.caption || ""} placeholder="Caption (optional)" style={{ padding: "0.5rem" }} />
-        {page.content.assetId ? (
-          <img
-            src={getAssetUrl(page.content.assetId)}
-            alt="Current page asset preview"
-            style={{ width: 180, height: 120, objectFit: "cover", borderRadius: 6, border: "1px solid #e5e7eb" }}
-          />
+        {hasImage ? (
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <img
+              src={getAssetUrl(page.content.assetId)}
+              alt="Current page asset preview"
+              style={{ width: 180, height: 120, objectFit: "cover", borderRadius: 6, border: "1px solid #e5e7eb" }}
+            />
+            <RemoveImageButton storybookId={storybookId} pageId={page.id} action={removeImageAction} />
+          </div>
         ) : null}
         <input
           name="assetId"
@@ -178,6 +257,8 @@ export default async function StudioStorybookPage({ params }: Props) {
         body: String(formData.get("body") ?? "").trim() || undefined,
         align: String(formData.get("align") ?? "left"),
         background: String(formData.get("background") ?? "").trim() || undefined,
+        backgroundAssetId: String(formData.get("backgroundAssetId") ?? "").trim() || undefined,
+        backgroundFit: String(formData.get("backgroundFit") ?? "cover"),
       };
     } else if (kind === "image") {
       content = {
@@ -220,6 +301,17 @@ export default async function StudioStorybookPage({ params }: Props) {
     const storybookId = String(formData.get("storybookId") ?? "");
     const pageId = String(formData.get("pageId") ?? "");
     await deletePage(pageId);
+    revalidatePath(`/studio/${storybookId}`);
+    revalidatePath("/studio");
+    revalidatePath(`/api/storybooks`);
+    redirect(`/studio/${storybookId}`);
+  }
+
+  async function removePageImageAction(formData: FormData) {
+    "use server";
+    const storybookId = String(formData.get("storybookId") ?? "");
+    const pageId = String(formData.get("pageId") ?? "");
+    await removePageImage({ storybookId, pageId });
     revalidatePath(`/studio/${storybookId}`);
     revalidatePath("/studio");
     revalidatePath(`/api/storybooks`);
@@ -314,12 +406,15 @@ export default async function StudioStorybookPage({ params }: Props) {
         {storybook.pages.map((page, index) => {
           // The reader treats the first page as the closed front cover and the
           // last page as the closed back cover.
-          const coverRole =
-            index === 0 ? "FRONT COVER" : index === storybook.pages.length - 1 && storybook.pages.length > 1 ? "BACK COVER" : null;
+          const isFrontCover = index === 0;
+          const isBackCover = index === storybook.pages.length - 1 && storybook.pages.length > 1;
+          const coverRole = isFrontCover ? "COVER" : isBackCover ? "BACK COVER" : null;
+          // Front cover is "Cover"; remaining pages count from 1.
+          const pageLabel = isFrontCover ? "Cover" : `Page ${index}`;
           return (
           <article key={page.id} style={{ border: "1px solid #ddd", borderRadius: 12, padding: "0.9rem", background: "#fff" }}>
             <div style={{ marginBottom: "0.6rem" }}>
-              <strong>Page {page.position + 1}</strong>{" "}
+              <strong>{pageLabel}</strong>{" "}
               <span
                 style={{
                   fontSize: 12,
@@ -366,7 +461,12 @@ export default async function StudioStorybookPage({ params }: Props) {
                   <option value="right">right</option>
                 </select>
               </label>
-              <PageEditFields storybookId={storybook.id} page={page} />
+              <PageEditFields
+                storybookId={storybook.id}
+                page={page}
+                isFrontCover={isFrontCover}
+                removeImageAction={removePageImageAction}
+              />
               <button type="submit" style={{ padding: "0.6rem", cursor: "pointer" }}>
                 Save Page
               </button>

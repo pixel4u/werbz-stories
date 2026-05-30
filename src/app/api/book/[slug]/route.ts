@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { NextResponse } from "next/server";
 
 function buildEngineHtml(slug: string, debug: boolean): string {
-  const sourcePath = join(process.cwd(), "specs", "book-engine-v28.html");
+  const sourcePath = join(process.cwd(), "specs", "book-engine-v29.html");
   let html = readFileSync(sourcePath, "utf8");
 
   html = html.replace(
@@ -73,7 +73,11 @@ function buildEngineHtml(slug: string, debug: boolean): string {
       texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
       texture.needsUpdate = true;
 
-      if (kind === 'image' && page?.assetId) {
+      // Async-load any page photo, then redraw the page with it. Covers both
+      // image pages (assetId) and text pages with a background photo
+      // (backgroundAssetId, e.g. the cover: picture + title).
+      const photoAssetId = kind === 'image' ? page?.assetId : (kind === 'text' ? page?.backgroundAssetId : null);
+      if (photoAssetId) {
         const image = new Image();
         image.crossOrigin = 'anonymous';
         image.onload = () => {
@@ -81,7 +85,8 @@ function buildEngineHtml(slug: string, debug: boolean): string {
           ctx.translate(canvas.width / 2, canvas.height / 2);
           ctx.scale(config.flipTextH ? -1 : 1, config.flipTextV ? -1 : 1);
           ctx.translate(-canvas.width / 2, -canvas.height / 2);
-          drawImagePage(ctx, canvas, page, image);
+          if (kind === 'image') drawImagePage(ctx, canvas, page, image);
+          else drawTextPage(ctx, canvas, page, image);
           if (DEBUG_MODE) drawDebugOverlay(ctx, page);
           ctx.restore();
           texture.needsUpdate = true;
@@ -89,20 +94,48 @@ function buildEngineHtml(slug: string, debug: boolean): string {
         image.onerror = () => {
           texture.needsUpdate = true;
         };
-        image.src = getAssetUrl(page.assetId);
+        image.src = getAssetUrl(photoAssetId);
       }
 
       return texture;
     }
 
-    function drawTextPage(ctx, canvas, page) {
-      const bg = '#ffffff';
-      ctx.fillStyle = bg;
+    function fitImage(ctx, canvas, image, fit) {
+      const sw = image.naturalWidth || image.width;
+      const sh = image.naturalHeight || image.height;
+      if (!sw || !sh) return;
+      const canvasRatio = canvas.width / canvas.height;
+      const imageRatio = sw / sh;
+      let dw = canvas.width, dh = canvas.height;
+      if (fit === 'contain') {
+        if (imageRatio > canvasRatio) { dw = canvas.width; dh = canvas.width / imageRatio; }
+        else { dh = canvas.height; dw = canvas.height * imageRatio; }
+      } else {
+        if (imageRatio > canvasRatio) { dh = canvas.height; dw = canvas.height * imageRatio; }
+        else { dw = canvas.width; dh = canvas.width / imageRatio; }
+      }
+      ctx.drawImage(image, (canvas.width - dw) / 2, (canvas.height - dh) / 2, dw, dh);
+    }
+
+    function drawTextPage(ctx, canvas, page, bgImage) {
+      const hasPhoto = !!(page.backgroundAssetId && bgImage);
+      ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      const textColor = page.background ? '#ffffff' : '#1d1d1d';
+      if (hasPhoto) {
+        fitImage(ctx, canvas, bgImage, page.backgroundFit || 'cover');
+        // Dark scrim so overlaid text stays legible over any photo.
+        const scrim = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        scrim.addColorStop(0, 'rgba(0,0,0,0.42)');
+        scrim.addColorStop(0.45, 'rgba(0,0,0,0.18)');
+        scrim.addColorStop(1, 'rgba(0,0,0,0.5)');
+        ctx.fillStyle = scrim;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+
+      const textColor = (page.background || hasPhoto) ? '#ffffff' : '#1d1d1d';
       ctx.fillStyle = textColor;
-      ctx.globalAlpha = page.background ? 0.86 : 0.55;
+      ctx.globalAlpha = (page.background || hasPhoto) ? 0.86 : 0.55;
       ctx.font = '700 34px Georgia, serif';
       ctx.fillText((page.eyebrow || '').toUpperCase(), 86, 150);
 
@@ -116,7 +149,7 @@ function buildEngineHtml(slug: string, debug: boolean): string {
       ctx.font = '700 96px Georgia, serif';
       wrapText(ctx, page.title || 'Untitled', titleX, 300, maxWidth, 108);
 
-      ctx.globalAlpha = page.background ? 0.95 : 0.72;
+      ctx.globalAlpha = (page.background || hasPhoto) ? 0.95 : 0.72;
       ctx.font = "400 42px 'Helvetica Neue', sans-serif";
       wrapText(ctx, page.body || '', bodyX, 610, maxWidth, 62);
       ctx.globalAlpha = 0.45;

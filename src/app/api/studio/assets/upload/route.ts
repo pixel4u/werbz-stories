@@ -21,6 +21,8 @@ export async function POST(request: Request) {
   const formData = await request.formData();
   const storybookId = String(formData.get("storybookId") ?? "").trim();
   const pageId = String(formData.get("pageId") ?? "").trim();
+  const targetRaw = String(formData.get("target") ?? "").trim();
+  const target = targetRaw === "text-background" ? "text-background" : targetRaw === "page-image" ? "page-image" : undefined;
   const file = formData.get("file");
 
   if (!storybookId || !pageId || !(file instanceof File)) {
@@ -46,6 +48,7 @@ export async function POST(request: Request) {
       bytes,
       width: parseIntField(formData.get("width")),
       height: parseIntField(formData.get("height")),
+      target,
     });
 
     return NextResponse.json({ ok: true, assetId: result.assetId });

@@ -8,6 +8,8 @@ interface ImageUploadFormProps {
   storybookId: string;
   pageId: string;
   currentAssetId: string;
+  // Which asset slot this upload writes to. Defaults to the image-page asset.
+  target?: "page-image" | "text-background";
 }
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -28,7 +30,7 @@ function readImageDimensions(file: File): Promise<{ width?: number; height?: num
   });
 }
 
-export function ImageUploadForm({ storybookId, pageId, currentAssetId }: ImageUploadFormProps) {
+export function ImageUploadForm({ storybookId, pageId, currentAssetId, target }: ImageUploadFormProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadedAssetId, setUploadedAssetId] = useState<string | null>(null);
@@ -57,6 +59,7 @@ export function ImageUploadForm({ storybookId, pageId, currentAssetId }: ImageUp
       formData.set("storybookId", storybookId);
       formData.set("pageId", pageId);
       formData.set("file", file);
+      if (target) formData.set("target", target);
       if (dimensions.width) formData.set("width", String(dimensions.width));
       if (dimensions.height) formData.set("height", String(dimensions.height));
 

@@ -419,6 +419,8 @@ export async function uploadImageAssetForPage(input: {
   bytes: Buffer;
   width?: number;
   height?: number;
+  // "page-image": image-page asset; "text-background": cover/text bg photo.
+  target?: "page-image" | "text-background";
 }): Promise<{ assetId: string }> {
   const db = getDb();
   if (!ALLOWED_IMAGE_MIME_TYPES.has(input.mimeType)) {
@@ -434,8 +436,12 @@ export async function uploadImageAssetForPage(input: {
   if (!page) throw new Error("Page not found");
 
   const parsedContent = PageContent.parse(page.content);
-  if (parsedContent.kind !== "image") {
-    throw new Error("Uploads are only enabled for image pages");
+  const target = input.target ?? (parsedContent.kind === "image" ? "page-image" : "text-background");
+  if (target === "page-image" && parsedContent.kind !== "image") {
+    throw new Error("Image-page uploads are only enabled for image pages");
+  }
+  if (target === "text-background" && parsedContent.kind !== "text") {
+    throw new Error("Background photo is only available on text pages");
   }
 
   const assetId = `asset-upload-${randomUUID()}`;
@@ -455,14 +461,47 @@ export async function uploadImageAssetForPage(input: {
     height: input.height ?? null,
   });
 
+  const nextContent =
+    target === "page-image"
+      ? { ...parsedContent, assetId }
+      : { ...parsedContent, backgroundAssetId: assetId };
+
   await updatePage({
     pageId: input.pageId,
     side: page.side,
-    content: {
-      ...parsedContent,
-      assetId,
-    },
+    content: nextContent,
   });
 
   return { assetId };
+}
+
+// Remove a page's photo. For text pages this clears the optional background
+// photo; for image pages it blanks the asset (the page then shows a placeholder
+// until a new image is uploaded).
+export async function removePageImage(input: {
+  storybookId: string;
+  pageId: string;
+}): Promise<void> {
+  const db = getDb();
+  const pageRows = await db
+    .select()
+    .from(pages)
+    .where(and(eq(pages.id, input.pageId), eq(pages.storybookId, input.storybookId)))
+    .limit(1);
+  const page = pageRows[0];
+  if (!page) throw new Error("Page not found");
+
+  const parsedContent = PageContent.parse(page.content);
+  let nextContent: PageContent;
+  if (parsedContent.kind === "text") {
+    const { backgroundAssetId: _omit, ...rest } = parsedContent;
+    void _omit;
+    nextContent = rest;
+  } else if (parsedContent.kind === "image") {
+    nextContent = { ...parsedContent, assetId: "" };
+  } else {
+    return; // nothing to remove on video/embed here
+  }
+
+  await updatePage({ pageId: input.pageId, side: page.side, content: nextContent });
 }
