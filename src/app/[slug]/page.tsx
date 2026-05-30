@@ -22,10 +22,12 @@ interface StoryPageProps {
 async function requestOtpAction(formData: FormData) {
   "use server";
   const slug = String(formData.get("slug") ?? "");
-  const email = String(formData.get("email") ?? "");
+  const email = String(formData.get("email") ?? "").trim();
+  const pendingEmail = await readViewerPendingCookie();
+  const targetEmail = email || pendingEmail || "";
 
   try {
-    const result = await requestViewerOtp(email);
+    const result = await requestViewerOtp(targetEmail);
     await setViewerPendingCookie(result.email);
     redirect(`/${slug}?step=code&sent=1`);
   } catch {
@@ -56,40 +58,59 @@ async function verifyOtpAction(formData: FormData) {
 
 function GateView({ slug, step, error }: { slug: string; step: string; error?: string }) {
   return (
-    <main style={{ maxWidth: 520, margin: "3rem auto", padding: "1rem", fontFamily: "system-ui, sans-serif" }}>
-      <h1 style={{ marginBottom: "0.8rem" }}>Read This Story</h1>
-      <p style={{ color: "#4b5563" }}>Enter your email to continue.</p>
+    <main style={{ maxWidth: 560, margin: "3rem auto", padding: "1rem", fontFamily: "system-ui, sans-serif" }}>
+      <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "1.2rem", boxShadow: "0 2px 10px rgba(15,23,42,0.04)" }}>
+        <h1 style={{ margin: "0 0 0.6rem" }}>Read This Story</h1>
+        <p style={{ color: "#4b5563", marginTop: 0 }}>Enter your email to receive a one-time reading code.</p>
 
-      {step === "code" ? (
-        <form action={verifyOtpAction} style={{ display: "grid", gap: "0.7rem", marginTop: "1rem" }}>
-          <input type="hidden" name="slug" value={slug} />
-          <label htmlFor="code">6-digit code</label>
-          <input id="code" name="code" inputMode="numeric" maxLength={6} required style={{ padding: "0.6rem" }} />
-          <button type="submit" style={{ padding: "0.7rem", cursor: "pointer" }}>
-            Verify code
-          </button>
-        </form>
-      ) : (
-        <form action={requestOtpAction} style={{ display: "grid", gap: "0.7rem", marginTop: "1rem" }}>
-          <input type="hidden" name="slug" value={slug} />
-          <label htmlFor="email">Email</label>
-          <input id="email" name="email" type="email" required style={{ padding: "0.6rem" }} />
-          <button type="submit" style={{ padding: "0.7rem", cursor: "pointer" }}>
-            Send code
-          </button>
-        </form>
-      )}
+        {step === "code" ? (
+          <>
+            <form action={verifyOtpAction} style={{ display: "grid", gap: "0.7rem", marginTop: "1rem" }}>
+              <input type="hidden" name="slug" value={slug} />
+              <label htmlFor="code">6-digit code</label>
+              <input
+                id="code"
+                name="code"
+                inputMode="numeric"
+                maxLength={6}
+                required
+                placeholder="123456"
+                style={{ padding: "0.7rem", fontSize: 18, letterSpacing: "0.2rem", textAlign: "center" }}
+              />
+              <button type="submit" style={{ padding: "0.75rem", cursor: "pointer", fontWeight: 600 }}>
+                Verify code
+              </button>
+            </form>
+            <form action={requestOtpAction} style={{ marginTop: "0.7rem" }}>
+              <input type="hidden" name="slug" value={slug} />
+              <input type="hidden" name="email" value="" />
+              <button type="submit" style={{ padding: "0.55rem 0.75rem", cursor: "pointer" }}>
+                Resend code
+              </button>
+            </form>
+          </>
+        ) : (
+          <form action={requestOtpAction} style={{ display: "grid", gap: "0.7rem", marginTop: "1rem" }}>
+            <input type="hidden" name="slug" value={slug} />
+            <label htmlFor="email">Email</label>
+            <input id="email" name="email" type="email" required style={{ padding: "0.7rem" }} />
+            <button type="submit" style={{ padding: "0.75rem", cursor: "pointer", fontWeight: 600 }}>
+              Send code
+            </button>
+          </form>
+        )}
 
-      <p style={{ marginTop: "1rem", color: "#6b7280", fontSize: 13 }}>
-        We’ll email you about new stories. You can unsubscribe anytime.
-      </p>
-      <p style={{ marginTop: "0.35rem", fontSize: 13 }}>
-        <Link href="/unsubscribe">Unsubscribe</Link>
-      </p>
+        <p style={{ marginTop: "1rem", color: "#6b7280", fontSize: 13 }}>
+          We’ll email you about new stories. You can unsubscribe anytime.
+        </p>
+        <p style={{ marginTop: "0.35rem", fontSize: 13 }}>
+          <Link href="/unsubscribe">Unsubscribe</Link>
+        </p>
 
-      {error === "email" ? <p style={{ color: "#b91c1c" }}>Could not send code. Check email or provider config.</p> : null}
-      {error === "code" ? <p style={{ color: "#b91c1c" }}>Invalid or expired code.</p> : null}
-      {error === "expired" ? <p style={{ color: "#b91c1c" }}>Session expired. Request a new code.</p> : null}
+        {error === "email" ? <p style={{ color: "#b91c1c" }}>Could not send code. Please try again in a moment.</p> : null}
+        {error === "code" ? <p style={{ color: "#b91c1c" }}>Invalid or expired code.</p> : null}
+        {error === "expired" ? <p style={{ color: "#b91c1c" }}>Session expired. Request a new code.</p> : null}
+      </div>
     </main>
   );
 }
@@ -100,7 +121,15 @@ export default async function StoryPage({ params, searchParams }: StoryPageProps
 
   const storybook = await getPublishedStorybookBySlug(slug);
   if (!storybook) {
-    redirect("/");
+    return (
+      <main style={{ maxWidth: 680, margin: "4rem auto", padding: "1rem", fontFamily: "system-ui, sans-serif", textAlign: "center" }}>
+        <h1 style={{ marginBottom: "0.6rem" }}>Story not found</h1>
+        <p style={{ color: "#4b5563" }}>This story is missing or not published yet.</p>
+        <Link href="/" style={{ display: "inline-block", marginTop: "0.8rem" }}>
+          Back to Stories
+        </Link>
+      </main>
+    );
   }
 
   const isStudioOwner = await isStudioAuthenticated();

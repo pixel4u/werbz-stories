@@ -130,7 +130,10 @@ export default async function StudioPage({
   return (
     <main style={{ maxWidth: 1200, margin: "2rem auto", padding: "1rem", fontFamily: "system-ui, sans-serif" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-        <h1>Studio</h1>
+        <div>
+          <h1 style={{ margin: 0 }}>Studio</h1>
+          <p style={{ margin: "0.35rem 0 0", color: "#6b7280" }}>Manage storybooks, publishing, and page editing.</p>
+        </div>
         <div style={{ display: "flex", gap: "0.5rem" }}>
           <Link href="/studio/analytics" style={{ padding: "0.6rem 1rem", border: "1px solid #ddd", borderRadius: 6 }}>
             Analytics
@@ -152,10 +155,28 @@ export default async function StudioPage({
         {books.map((book) => {
           const nextStatus = book.status === "published" ? "draft" : "published";
           return (
-            <article key={book.id} style={{ border: "1px solid #ddd", borderRadius: 8, padding: "1rem" }}>
+            <article
+              key={book.id}
+              style={{
+                border: "1px solid #e5e7eb",
+                borderRadius: 12,
+                padding: "1rem",
+                boxShadow: "0 1px 8px rgba(15,23,42,0.04)",
+                background: "#fff",
+              }}
+            >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.6rem" }}>
                 <strong>{book.title}</strong>
-                <StatusBadge status={book.status} />
+                <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                  <StatusBadge status={book.status} />
+                  <Link
+                    href={`/${book.slug}`}
+                    target="_blank"
+                    style={{ fontSize: 13, color: "#1f2937", textDecoration: "none", border: "1px solid #e5e7eb", borderRadius: 999, padding: "0.2rem 0.6rem" }}
+                  >
+                    Preview
+                  </Link>
+                </div>
               </div>
               <p style={{ marginBottom: "0.8rem", color: "#555" }}>{book.summary || "No summary"}</p>
               <p style={{ fontSize: 13, marginBottom: "0.8rem", color: "#666" }}>
@@ -195,6 +216,18 @@ export default async function StudioPage({
                   }}
                 >
                   Edit Pages
+                </Link>
+                <Link
+                  href="/studio/analytics"
+                  style={{
+                    padding: "0.5rem 0.8rem",
+                    border: "1px solid #ddd",
+                    borderRadius: 6,
+                    textDecoration: "none",
+                    color: "inherit",
+                  }}
+                >
+                  Analytics
                 </Link>
 
                 <form action={togglePublishAction}>

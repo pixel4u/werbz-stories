@@ -83,6 +83,7 @@ export function ImageUploadForm({ storybookId, pageId, currentAssetId }: ImageUp
   return (
     <div style={{ border: "1px dashed #cbd5e1", borderRadius: 8, padding: "0.75rem" }}>
       <label style={{ display: "block", marginBottom: "0.4rem" }}>Upload image (max 10MB)</label>
+      <p style={{ margin: "0 0 0.6rem", color: "#64748b", fontSize: 13 }}>Supported: JPG, PNG, WEBP, GIF.</p>
       <div
         onDragOver={(event) => {
           event.preventDefault();
@@ -126,6 +127,7 @@ export function ImageUploadForm({ storybookId, pageId, currentAssetId }: ImageUp
           />
         </div>
       ) : null}
+      {uploadedAssetId ? <p style={{ marginTop: "0.5rem", color: "#065f46" }}>Uploaded and linked successfully.</p> : null}
       {error ? <p style={{ color: "#b91c1c", marginTop: "0.5rem" }}>{error}</p> : null}
     </div>
   );

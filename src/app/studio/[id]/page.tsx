@@ -66,15 +66,15 @@ function PageEditFields({ storybookId, page }: { storybookId: string; page: Stud
   if (page.content.kind === "image") {
     return (
       <>
-        <input name="assetId" defaultValue={page.content.assetId} placeholder="assetId" style={{ padding: "0.5rem" }} />
+        <ImageUploadForm storybookId={storybookId} pageId={page.id} currentAssetId={page.content.assetId} />
+        <p style={{ margin: 0, fontSize: 13, color: "#4b5563" }}>
+          Current image asset: <code>{page.content.assetId || "none"}</code>
+        </p>
         <select name="fit" defaultValue={page.content.fit || "cover"} style={{ padding: "0.5rem" }}>
           <option value="cover">cover</option>
           <option value="contain">contain</option>
         </select>
         <input name="caption" defaultValue={page.content.caption || ""} placeholder="Caption (optional)" style={{ padding: "0.5rem" }} />
-        <p style={{ margin: 0, fontSize: 13, color: "#4b5563" }}>
-          Current image asset: <code>{page.content.assetId || "none"}</code>
-        </p>
         {page.content.assetId ? (
           <img
             src={getAssetUrl(page.content.assetId)}
@@ -82,7 +82,12 @@ function PageEditFields({ storybookId, page }: { storybookId: string; page: Stud
             style={{ width: 180, height: 120, objectFit: "cover", borderRadius: 6, border: "1px solid #e5e7eb" }}
           />
         ) : null}
-        <ImageUploadForm storybookId={storybookId} pageId={page.id} currentAssetId={page.content.assetId} />
+        <input
+          name="assetId"
+          defaultValue={page.content.assetId}
+          placeholder="Manual assetId override (optional)"
+          style={{ padding: "0.5rem", background: "#f8fafc", border: "1px dashed #cbd5e1" }}
+        />
       </>
     );
   }
@@ -282,9 +287,12 @@ export default async function StudioStorybookPage({ params }: Props) {
         </p>
       ) : null}
 
-      <section style={{ marginTop: "1.2rem", border: "1px solid #e5e7eb", borderRadius: 10, padding: "0.9rem" }}>
+      <section style={{ marginTop: "1.2rem", border: "1px solid #e5e7eb", borderRadius: 12, padding: "0.9rem", background: "#fcfcfc" }}>
         <h2 style={{ marginTop: 0 }}>Add Page</h2>
-        <form action={addPageAction} style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
+        <form
+          action={addPageAction}
+          style={{ display: "grid", gap: "0.6rem", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", alignItems: "center" }}
+        >
           <input type="hidden" name="storybookId" value={storybook.id} />
           <select name="kind" defaultValue="text" style={{ padding: "0.5rem" }}>
             <option value="text">text</option>
@@ -296,7 +304,7 @@ export default async function StudioStorybookPage({ params }: Props) {
             <option value="left">left</option>
             <option value="right">right</option>
           </select>
-          <button type="submit" style={{ padding: "0.5rem 0.8rem", cursor: "pointer" }}>
+          <button type="submit" style={{ padding: "0.6rem 0.8rem", cursor: "pointer", fontWeight: 600 }}>
             Add page
           </button>
         </form>
@@ -304,11 +312,23 @@ export default async function StudioStorybookPage({ params }: Props) {
 
       <section style={{ display: "grid", gap: "1rem", marginTop: "1rem" }}>
         {storybook.pages.map((page) => (
-          <article key={page.id} style={{ border: "1px solid #ddd", borderRadius: 10, padding: "0.9rem" }}>
+          <article key={page.id} style={{ border: "1px solid #ddd", borderRadius: 12, padding: "0.9rem", background: "#fff" }}>
             <div style={{ marginBottom: "0.6rem" }}>
-              <strong>Page {page.position + 1}</strong>
+              <strong>Page {page.position + 1}</strong>{" "}
+              <span
+                style={{
+                  fontSize: 12,
+                  border: "1px solid #d1d5db",
+                  borderRadius: 999,
+                  padding: "0.2rem 0.5rem",
+                  marginLeft: 6,
+                  color: "#334155",
+                }}
+              >
+                {page.content.kind}
+              </span>
               <p style={{ margin: "0.25rem 0", color: "#555" }}>
-                id: <code>{page.id}</code> | position: {page.position} | side: <code>{page.side}</code> | kind: <code>{page.content.kind}</code>
+                id: <code>{page.id}</code> | position: {page.position} | side: <code>{page.side}</code>
               </p>
               <p style={{ margin: 0, fontSize: 14, color: "#6b7280" }}>Preview: {contentPreview(page.content)}</p>
             </div>
