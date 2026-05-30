@@ -1,72 +1,74 @@
 # werbz-stories
 
-Standalone Stories platform for `werbz.com` using Next.js App Router, PostgreSQL, and Drizzle ORM.
+Standalone Stories platform for `werbz.com`.
 
-## Prompt 1 Foundation Included
+## Current Status
 
-- Shared schema: `src/lib/stories/schema.ts`
-- DB schema/client: `src/db/schema.ts`, `src/db/client.ts`
-- Drizzle config + migration: `drizzle.config.ts`, `drizzle/`
-- Idempotent seed: `scripts/seed.ts`
-- Read repository functions:
-  - `getStorybookBySlug(slug)`
-  - `listPublishedStorybooks()`
-- Public read endpoints:
-  - `GET /api/storybooks`
-  - `GET /api/storybooks/[slug]`
+Production is live with:
+- Public Library at `/`
+- OTP-gated Story Reader at `/[slug]`
+- 3D Book viewer (v28 runtime based on v27 tuning)
+- Studio auth + dashboard CRUD at `/studio`
+- Studio page editor CRUD at `/studio/[id]`
+- Studio analytics at `/studio/analytics`
+- Local VPS file uploads for image assets (Prompt 5)
+
+Latest known project commit in this repo: `c746674`.
+
+## Stack
+
+- Next.js App Router
+- PostgreSQL
+- Drizzle ORM
+- Route Handlers + Server Actions
+- PM2 on Hostinger VPS
+- Caddy reverse proxy
+
+## Routes
+
+- `/` public published stories library
+- `/studio` owner dashboard (auth required)
+- `/studio/[id]` story page editor (auth required)
+- `/studio/analytics` analytics (auth required)
+- `/[slug]` public story reader (OTP-gated)
+
+API:
+- `GET /api/storybooks` (published only)
+- `GET /api/storybooks/[slug]` (published only)
+- `GET /api/assets/[assetId]`
+- `GET /api/book/[slug]`
 
 ## Environment
 
-Create `.env`:
+Copy `.env.example` and fill values:
 
 ```bash
 cp .env.example .env
 ```
 
-Required vars:
+Core:
+- `DATABASE_URL`
+- `STUDIO_PASSWORD`
+- `COOKIE_SECRET`
+- `NEXT_PUBLIC_APP_URL`
+- `UPLOADS_DIR` (optional; defaults to `./uploads`)
 
-- `DATABASE_URL` (PostgreSQL connection string)
-- `STUDIO_PASSWORD` (owner login password)
-- `COOKIE_SECRET` (used to sign studio auth cookie)
-- `UPLOADS_DIR` (optional, defaults to `./uploads`; local image uploads stored here)
+OTP / email:
+- `RESEND_API_KEY` (or alternate provider vars if supported)
+- `EMAIL_FROM`
 
-Example is provided in `.env.example`.
-
-## Run
-
-Install:
+## Local Setup
 
 ```bash
 pnpm install
-```
-
-Generate migrations from schema:
-
-```bash
-pnpm db:generate
-```
-
-Apply migrations:
-
-```bash
 pnpm db:migrate
-```
-
-Seed sample storybook (safe to run repeatedly):
-
-```bash
 pnpm db:seed
-```
-
-Start app:
-
-```bash
 pnpm dev
 ```
 
-## Quick checks
+## Verification
 
-- Routes:
+- App:
   - `/`
   - `/studio`
   - `/the-lighthouse`
@@ -76,10 +78,27 @@ pnpm dev
 - DB:
   - `select * from storybooks;`
 
-## Notes
+## Deployment (werbz-only)
 
-- Asset IDs are text IDs (for example `asset-cover-lighthouse`), not UUID-only.
-- `assets.id` is `text` PK.
-- `storybooks.cover_asset_id` is a `text` FK to `assets.id`.
-- Prompt 5 image upload uses local file storage fallback and stores metadata in `assets`.
-- Uploaded media is served via `GET /api/assets/[assetId]`.
+On VPS at `/var/www/werbz-stories`:
+
+```bash
+git pull --ff-only origin main
+pnpm install --frozen-lockfile
+pnpm build
+pnpm db:migrate
+pnpm db:seed
+pm2 restart werbz-stories --update-env
+pm2 save
+```
+
+Safety rules:
+- Only touch process `werbz-stories`
+- Do not modify RB app/processes
+- Do not overwrite entire Caddyfile
+
+## Handoff Docs
+
+- `docs/HANDOFF.md`
+- `docs/BEST_PRACTICES.md`
+- `docs/STATUS.md`

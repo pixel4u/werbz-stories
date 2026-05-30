@@ -1,151 +1,92 @@
 # Engineering Prompts — werbz.com (Standalone Stories)
 
-Execute these prompts in order. This is a **brand-new standalone project**, not
-part of any existing monorepo/CRM app.
+This project is a standalone app. It is not part of RB/ReallyVibrant monorepo.
 
-Reference specs:
-- `storybook-schema.ts`
-- `db-schema.ts`
-- `sample-storybook.json`
-- `PLAN.md`
-- `book-engine-v27.html`
+References:
+- `specs/PLAN.md`
+- `specs/storybook-schema.ts`
+- `specs/db-schema.ts`
+- `specs/sample-storybook.json`
+- `specs/book-engine-v27.html` (baseline)
 
----
+## Prompt Progress Snapshot
 
-## Project context
+Completed:
+- Prompt 1: foundations + DB + seed + API
+- Prompt 2: data-driven 3D reader
+- Prompt 3: Studio auth + dashboard CRUD
+- Prompt 4: Studio page editor CRUD/reorder
+- Prompt 5: image uploads (local fallback storage)
+- Prompt 7: library + OTP + analytics
 
-> Build a standalone Stories platform for `werbz.com`.
->
-> - Public Library at `/`
-> - Studio at `/studio`
-> - Story viewer at `/[slug]`
->
-> Storybooks are ordered typed pages (`text`, `image`, `video`, `embed`).
-> Readers are gated by OTP email (later phase). Book rendering uses the tuned
-> `book-engine-v27.html` as baseline.
->
-> Stack:
-> - Next.js App Router
-> - PostgreSQL + Drizzle ORM
-> - Route Handlers (public API)
-> - Server Actions (Studio mutations where practical)
-> - Resend/Postmark later
-> - Cloudflare R2 later
-> - Hostinger VPS deploy later
+Remaining major work:
+- Prompt 6 live embed behavior enhancements
+- R2 asset storage migration
+- richer media workflows (video upload pipeline)
 
----
+## Prompt 1 (done)
 
-## Prompt 1 — Local schema modules + database baseline
+- `src/lib/stories/schema.ts`
+- `src/db/schema.ts`
+- `src/db/client.ts`
+- `scripts/seed.ts`
+- Drizzle migration setup
 
-> Create local shared modules and DB foundations:
->
-> - `src/lib/stories/schema.ts` (from `storybook-schema.ts`)
-> - `src/db/schema.ts` (from `db-schema.ts`)
-> - `src/db/client.ts`
-> - migration files
-> - `scripts/seed.ts`
->
-> Seed `sample-storybook.json` as published. Seed must be idempotent.
->
-> Add Zod validation at API boundaries via `parseStorybook()`.
->
-> **Important:** use **text asset IDs** (human-readable IDs) instead of UUID-only
-> asset IDs.
+Rules:
+- text IDs for assets
+- idempotent seed
+- `parseStorybook()` for validated data boundaries
 
-**Test:** `storybooks` contains seeded row; re-running seed is safe.
+## Prompt 2 (done)
 
----
+- Refactored book engine into app runtime
+- Reader mounted at `/[slug]`
+- Pulls data from `/api/storybooks/[slug]`
+- Path A rendering for text/image/video(embed poster)
+- Visual QA and orientation/debug pass completed
+- Later change added v28-style closed-cover start behavior
 
-## Prompt 2 — Make the Book data-driven with v27 engine
+## Prompt 3 (done)
 
-> Refactor `book-engine-v27.html` into a reusable Next.js client component used
-> by route `/[slug]`.
->
-> Replace hardcoded pages with Storybook data fetched by slug from a Route
-> Handler.
->
-> Implement Path A:
-> - `text`: render eyebrow/title/body to canvas
-> - `image`: draw asset with `cover`/`contain`
-> - `video`: poster texture for now
-> - `embed`: poster texture for now
->
-> Apply optional Storybook `theme` overrides to engine config.
->
-> Preserve tuned page-flip behavior from v27.
+- `/studio` auth via env password + signed httpOnly cookie
+- dashboard CRUD for storybooks
 
-**Test:** `/the-lighthouse` renders seeded book with unchanged flip feel.
+## Prompt 4 (done)
 
----
+- `/studio/[id]` editor
+- add/edit/delete/reorder/side swap page operations
+- position normalization on updates
+- page content validation through shared schema
 
-## Prompt 3 — Studio auth + dashboard CRUD
+## Prompt 5 (done, phase 1)
 
-> Build `/studio` with single-owner auth:
-> - env password + signed httpOnly cookie is acceptable
->
-> Build Storybook dashboard:
-> - list cards with cover/title/status/view count
-> - create, duplicate, delete, update metadata
->
-> Implement via Server Actions and/or internal Route Handlers.
+- Image upload enabled in Studio editor
+- assets rows persisted
+- local file storage fallback in VPS app path
+- viewer resolves uploaded asset URLs
 
-**Test:** owner can log in and manage Storybooks end-to-end.
+## Prompt 7 (done)
 
----
+- Public Library at `/`
+- OTP gate for reader flow
+- viewer cookie verify flow
+- analytics page + CSV export
 
-## Prompt 4 — Studio page editor
+## Deployment Guardrails
 
-> Build `/studio/[id]` editor:
-> - two-leaf spread preview
-> - reorder pages
-> - typed forms for page content
-> - preview in `/[slug]` for draft
->
-> Persist writes through validated server-side paths (Server Actions or Route
-> Handlers) with `PageContent` validation.
+For werbz deploys:
+- Path: `/var/www/werbz-stories`
+- PM2 app: `werbz-stories`
+- restart only: `pm2 restart werbz-stories --update-env`
 
-**Test:** create and reorder mixed text/image pages, preview successfully.
+Never:
+- restart/delete all PM2 apps
+- overwrite whole Caddyfile
+- touch RB app infra
 
----
+## Next Prompt (recommended)
 
-## Prompt 5 — Asset uploads (R2)
-
-> Add presigned uploads to Cloudflare R2 (browser direct upload), store metadata
-> in `assets`, and enforce file/mime limits.
-
-**Test:** uploaded image appears in Studio preview and Book.
-
----
-
-## Prompt 6 — Embed pages (Path B)
-
-> Implement poster-during-flip and live sandboxed iframe-on-settle behavior for
-> `embed` pages.
-
-**Test:** embed appears only when leaf settles; unmounts during flip.
-
----
-
-## Prompt 7 — OTP gate + analytics
-
-> Build OTP gate for `/[slug]` using viewer email + hashed code + signed cookie.
-> Log view events and add `/studio/analytics` with CSV export.
-
-**Test:** unverified user must verify OTP; verified revisits skip gate.
-
----
-
-## Prompt 8 — Deploy to Hostinger VPS (`werbz.com`)
-
-> Deploy Next.js app to Hostinger VPS behind Nginx + Cloudflare, enforce HTTPS,
-> configure env vars, run migrations on deploy, and verify end-to-end routes.
-
-**Test:** `https://werbz.com`, `/studio`, and `/<slug>` all function correctly.
-
----
-
-## Suggested order
-
-1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
-
-Fast launch variant: 1 → 2 → 3 → 4 → 7 → 8, then 5 and 6.
+Prompt 6 continuation:
+- Improve embed live mode with settle/unsettle mount control
+- keep flip performance intact
+- maintain existing OTP/library/studio behavior

@@ -1,97 +1,77 @@
 # werbz Stories — Architecture & Build Plan
 
-A standalone platform for authoring **Storybooks** (short illustrated stories
-rendered in a 3D WebGL book) and sharing them with readers via `werbz.com`.
+Standalone Stories platform for `werbz.com` root.
 
-## Vocabulary
+## Production Route Map
 
-| Term | What it is | Who touches it |
-|---|---|---|
-| **Storybook** | One story = an ordered list of pages | Owner author |
-| **Page** | One leaf (left or right), of a typed kind | — |
-| **Library** | Public list page: "Stories" + published books | Readers |
-| **Studio** | Admin area to create / edit / delete Storybooks | Owner only |
-| **The Book** | 3D WebGL viewer (tuned v27 engine) | Renders a Storybook |
+- `/` public Stories library (published only)
+- `/studio` owner dashboard
+- `/studio/[id]` owner page editor
+- `/studio/analytics` owner analytics
+- `/[slug]` public story reader (OTP-gated)
 
-Flow: **author in Studio → save in Postgres → list in Library → open in Book**.
+No `/stories` prefix.
 
-## Stack (standalone, no unnecessary complexity)
+## Current Build State
 
-- **Next.js App Router**
-- **PostgreSQL + Drizzle ORM**
-- **Route Handlers** for public JSON endpoints
-- **Server Actions** for Studio mutations where practical
-- **Resend or Postmark** later for OTP email
-- **Cloudflare R2** later for media uploads (VPS uploads fallback optional)
-- **Hostinger VPS** deployment later, behind Cloudflare
+Completed:
+1. Prompt 1 foundation (schema, DB, migrations, seed)
+2. Prompt 2 3D viewer integration (v27 baseline, now v28 runtime version)
+3. Prompt 3 Studio auth + Storybook CRUD
+4. Prompt 4 Studio page editor CRUD + reorder
+5. Prompt 5 image uploads (local VPS fallback)
+6. Prompt 7 library + OTP gate + analytics
+7. UX polish pass
 
-## Routes (werbz.com root)
+Pending / later:
+- Full live embed runtime (beyond poster behavior)
+- Video upload pipeline
+- R2 migration for assets
+- additional theme/editor polish
 
-- `/` — public Stories library
-- `/studio` — owner Studio
-- `/[slug]` — Storybook viewer
+## Stack (standalone)
 
-No `/stories` base path.
+- Next.js App Router
+- PostgreSQL + Drizzle ORM
+- Route Handlers for public/API endpoints
+- Server Actions for Studio mutations
+- Resend (configured in prod) for OTP email
+- Hostinger VPS + PM2 + Caddy
 
-## Content contract (single source of truth)
+## Data Model
 
-A page is a typed block, never freeform HTML. Four page types:
+Primary tables:
+- `storybooks`
+- `pages`
+- `assets`
+- `viewers`
+- `view_events`
 
-| Type | Render path | Notes |
-|---|---|---|
-| `text` | Path A — canvas texture | title/body/eyebrow + optional background |
-| `image` | Path A — canvas texture | image asset drawn on page |
-| `video` | Path A — poster first, video on settle | optimize flip performance |
-| `embed` | Path B — poster + live iframe on settle | sandboxed iframe |
+Asset ID strategy:
+- `assets.id` is `text` primary key
+- `storybooks.cover_asset_id` is `text` FK to `assets.id`
 
-The contract lives in `storybook-schema.ts` and is used by both Studio and Book.
+## Rendering Contract
 
-## Two render paths
+Source of truth:
+- `specs/storybook-schema.ts`
 
-- **Path A (`text`/`image`/`video`)**: uses the existing `loadPageTexture(i)`
-  style pipeline from the tuned engine.
-- **Path B (`embed`)**: shows poster during flip, mounts live sandboxed iframe
-  when the page settles.
+Book engine reference:
+- `specs/book-engine-v27.html` baseline
+- runtime app currently uses updated v28 behavior (single-page closed cover start)
 
-## Data model
+Path A page types implemented:
+- `text`
+- `image`
+- `video` (poster)
+- `embed` (poster)
 
-- `storybooks` → `pages` (`content` jsonb union)
-- `assets` (metadata + storage key, no bytes in Postgres)
-- `viewers` + `view_events` for OTP and analytics
+## Deployment Target
 
-Asset IDs are **text IDs** (human-readable), not UUID-only.
+- App path: `/var/www/werbz-stories`
+- PM2 process: `werbz-stories`
+- Internal port: `3005`
+- Domain: `werbz.com`
 
-## Surfaces
-
-### 1) Studio — `/studio`
-- Dashboard: list/grid of Storybooks, create/duplicate/edit/delete
-- Editor: two-leaf spread, reorder pages, add typed pages
-- Preview in real Book viewer against current draft
-
-### 2) Library + Book — `/` and `/[slug]`
-- `/`: "Stories" heading + published books list
-- `/[slug]`: the v27 book engine, data-driven from Storybook JSON
-
-### 3) Email gate (later phase)
-1. Enter email
-2. Verify 6-digit OTP
-3. Receive signed cookie and continue
-
-## Build order
-
-1. Shared schema + DB schema + migrations + idempotent seed
-2. Public read endpoints (library + story-by-slug) with Zod validation
-3. Refactor `book-engine-v27.html` into `/[slug]` data-driven viewer (Path A first)
-4. Studio auth (`env` password + signed httpOnly cookie)
-5. Studio CRUD + page editor (data-only editing)
-6. OTP gate + analytics
-7. R2 asset uploads
-8. Embed live overlay (Path B)
-9. VPS deploy to `werbz.com`
-
-## Files in this spec
-
-- `storybook-schema.ts` — shared content contract
-- `db-schema.ts` — Drizzle Postgres schema
-- `sample-storybook.json` — reference seeded Storybook
-- `book-engine-v27.html` — tuned baseline engine to integrate
+Hard safety rule:
+- Never modify/touch RB monolithic app during werbz deploys.
