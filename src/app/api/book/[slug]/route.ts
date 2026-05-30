@@ -22,6 +22,14 @@ function buildEngineHtml(slug: string, debug: boolean): string {
   );
 
   const renderers = `
+    function drawNeutralPaper(ctx, canvas) {
+      const g = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+      g.addColorStop(0, '#f4f2ec');
+      g.addColorStop(1, '#ddd7c9');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
     function createStoryTexture(page) {
       const canvas = document.createElement('canvas');
       canvas.width = 1200; canvas.height = 1600;
@@ -35,11 +43,7 @@ function buildEngineHtml(slug: string, debug: boolean): string {
       if (kind === 'text') {
         drawTextPage(ctx, canvas, page);
       } else if (kind === 'image') {
-        drawMediaPlaceholder(ctx, canvas, {
-          label: 'IMAGE',
-          line1: 'image: ' + (page.assetId || 'missing-asset-id'),
-          line2: 'fit: ' + (page.fit || 'cover'),
-        });
+        drawImagePage(ctx, canvas, page);
       } else if (kind === 'video') {
         drawMediaPlaceholder(ctx, canvas, {
           label: 'VIDEO',
@@ -68,6 +72,26 @@ function buildEngineHtml(slug: string, debug: boolean): string {
       texture.colorSpace = THREE.SRGBColorSpace;
       texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
       texture.needsUpdate = true;
+
+      if (kind === 'image' && page?.assetId) {
+        const image = new Image();
+        image.crossOrigin = 'anonymous';
+        image.onload = () => {
+          ctx.save();
+          ctx.translate(canvas.width / 2, canvas.height / 2);
+          ctx.scale(config.flipTextH ? -1 : 1, config.flipTextV ? -1 : 1);
+          ctx.translate(-canvas.width / 2, -canvas.height / 2);
+          drawImagePage(ctx, canvas, page, image);
+          if (DEBUG_MODE) drawDebugOverlay(ctx, page);
+          ctx.restore();
+          texture.needsUpdate = true;
+        };
+        image.onerror = () => {
+          texture.needsUpdate = true;
+        };
+        image.src = getAssetUrl(page.assetId);
+      }
+
       return texture;
     }
 
@@ -102,16 +126,72 @@ function buildEngineHtml(slug: string, debug: boolean): string {
       ctx.globalAlpha = 1;
     }
 
+    function drawImagePage(ctx, canvas, page, image) {
+      if (!image) {
+        drawMediaPlaceholder(ctx, canvas, {
+          label: 'IMAGE',
+          line1: 'loading: ' + (page.assetId || 'missing-asset-id'),
+          line2: 'fit: ' + (page.fit || 'cover'),
+        });
+        return;
+      }
+
+      drawNeutralPaper(ctx, canvas);
+      const fit = page.fit || 'cover';
+      const sw = image.naturalWidth || image.width;
+      const sh = image.naturalHeight || image.height;
+      if (!sw || !sh) {
+        drawMediaPlaceholder(ctx, canvas, {
+          label: 'IMAGE',
+          line1: 'image unavailable',
+          line2: 'asset: ' + (page.assetId || 'n/a'),
+        });
+        return;
+      }
+
+      const canvasRatio = canvas.width / canvas.height;
+      const imageRatio = sw / sh;
+      let dw = canvas.width;
+      let dh = canvas.height;
+
+      if (fit === 'contain') {
+        if (imageRatio > canvasRatio) {
+          dw = canvas.width;
+          dh = canvas.width / imageRatio;
+        } else {
+          dh = canvas.height;
+          dw = canvas.height * imageRatio;
+        }
+      } else {
+        if (imageRatio > canvasRatio) {
+          dh = canvas.height;
+          dw = canvas.height * imageRatio;
+        } else {
+          dw = canvas.width;
+          dh = canvas.width / imageRatio;
+        }
+      }
+
+      const dx = (canvas.width - dw) / 2;
+      const dy = (canvas.height - dh) / 2;
+      ctx.drawImage(image, dx, dy, dw, dh);
+
+      if (page.caption) {
+        ctx.fillStyle = 'rgba(15,15,15,0.62)';
+        roundRect(ctx, 56, canvas.height - 136, canvas.width - 112, 74, 16);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = "500 30px 'Helvetica Neue', sans-serif";
+        ctx.fillText(page.caption, 84, canvas.height - 88);
+      }
+    }
+
     function drawMediaPlaceholder(ctx, canvas, opts) {
       const label = opts.label;
       const line1 = opts.line1;
       const line2 = opts.line2;
 
-      const g = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-      g.addColorStop(0, '#f4f2ec');
-      g.addColorStop(1, '#ddd7c9');
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      drawNeutralPaper(ctx, canvas);
 
       const glow = ctx.createRadialGradient(240, 190, 20, 240, 190, 780);
       glow.addColorStop(0, 'rgba(255,255,255,0.26)');
@@ -123,8 +203,8 @@ function buildEngineHtml(slug: string, debug: boolean): string {
       ctx.font = '700 58px Georgia, serif';
       ctx.fillText(label + ' PAGE', 88, 180);
 
-      drawCard(ctx, 88, 260, 1024, 180, '#2b2b2b', false, 'Reference', line1 || 'n/a');
-      drawCard(ctx, 88, 470, 1024, 180, '#2b2b2b', false, 'Notes', line2 || 'Path A placeholder texture');
+      drawCard(ctx, 88, 260, 1024, 180, '#2b2b2b', false, 'Asset', line1 || 'n/a');
+      drawCard(ctx, 88, 470, 1024, 180, '#2b2b2b', false, 'Details', line2 || 'Path A placeholder texture');
     }
 
     function drawDebugOverlay(ctx, page) {
@@ -195,6 +275,62 @@ function buildEngineHtml(slug: string, debug: boolean): string {
   );
 
   const boot = `
+    let coverOverlayEl = null;
+    function hideCoverOverlay() {
+      if (!coverOverlayEl) return;
+      coverOverlayEl.style.opacity = '0';
+      setTimeout(() => {
+        if (coverOverlayEl && coverOverlayEl.parentNode) {
+          coverOverlayEl.parentNode.removeChild(coverOverlayEl);
+        }
+      }, 220);
+    }
+
+    function showCoverOverlay(storybook) {
+      const coverAssetId = storybook.coverAssetId || (pages[0] && pages[0].kind === 'image' ? pages[0].assetId : null);
+      coverOverlayEl = document.createElement('div');
+      coverOverlayEl.style.position = 'fixed';
+      coverOverlayEl.style.inset = '0';
+      coverOverlayEl.style.zIndex = '10000';
+      coverOverlayEl.style.display = 'grid';
+      coverOverlayEl.style.placeItems = 'center';
+      coverOverlayEl.style.background = '#121212';
+      coverOverlayEl.style.transition = 'opacity 220ms ease';
+
+      const card = document.createElement('div');
+      card.style.width = 'min(72vw, 580px)';
+      card.style.aspectRatio = '3 / 4';
+      card.style.borderRadius = '14px';
+      card.style.boxShadow = '0 18px 40px rgba(0,0,0,0.45)';
+      card.style.overflow = 'hidden';
+      card.style.background = '#f3f0e8';
+      card.style.display = 'flex';
+      card.style.flexDirection = 'column';
+
+      const img = document.createElement('img');
+      img.alt = (storybook.title || 'Storybook') + ' cover';
+      img.style.width = '100%';
+      img.style.height = '100%';
+      img.style.objectFit = 'cover';
+      if (coverAssetId) img.src = getAssetUrl(coverAssetId);
+
+      const footer = document.createElement('button');
+      footer.type = 'button';
+      footer.textContent = 'Open story';
+      footer.style.border = '0';
+      footer.style.background = '#111827';
+      footer.style.color = '#fff';
+      footer.style.padding = '12px';
+      footer.style.fontSize = '15px';
+      footer.style.cursor = 'pointer';
+      footer.onclick = () => hideCoverOverlay();
+
+      card.appendChild(img);
+      card.appendChild(footer);
+      coverOverlayEl.appendChild(card);
+      document.body.appendChild(coverOverlayEl);
+    }
+
     async function loadStorybookFromApi() {
       try {
         const res = await fetch('/api/storybooks/${slug}');
@@ -223,6 +359,24 @@ function buildEngineHtml(slug: string, debug: boolean): string {
             },
           }));
 
+        const coverAssetId = storybook.coverAssetId || (pages[0] && pages[0].kind === 'image' ? pages[0].assetId : null);
+        if (coverAssetId) {
+          pages.unshift({
+            kind: 'image',
+            assetId: coverAssetId,
+            fit: 'cover',
+            num: 0,
+            __meta: { id: 'cover-page', position: -1, side: 'right' },
+          });
+          pages.push({
+            kind: 'image',
+            assetId: coverAssetId,
+            fit: 'cover',
+            num: pages.length + 1,
+            __meta: { id: 'ending-page', position: 99999, side: 'left' },
+          });
+        }
+
         if (pages.length % 2 === 1) {
           pages.push({
             kind: 'text',
@@ -238,6 +392,7 @@ function buildEngineHtml(slug: string, debug: boolean): string {
         cleanupActiveFlip();
         regenerateTextures();
         buildBook();
+        showCoverOverlay(storybook);
       } catch (err) {
         console.error(err);
       }
