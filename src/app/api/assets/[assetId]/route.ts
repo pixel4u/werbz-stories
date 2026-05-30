@@ -1,11 +1,21 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
 import { NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
+
+import { getDb } from "@/db/client";
+import { assets } from "@/db/schema";
 
 interface Params {
   params: Promise<{ assetId: string }>;
 }
 
-export async function GET(_: Request, { params }: Params) {
-  const { assetId } = await params;
+function uploadsDir(): string {
+  return process.env.UPLOADS_DIR || join(process.cwd(), "uploads");
+}
+
+function renderPlaceholder(assetId: string) {
   const safe = assetId.replace(/[^a-zA-Z0-9-_]/g, "_");
 
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
@@ -28,4 +38,28 @@ export async function GET(_: Request, { params }: Params) {
       "cache-control": "public, max-age=3600",
     },
   });
+}
+
+export async function GET(_: Request, { params }: Params) {
+  const { assetId } = await params;
+  const db = getDb();
+
+  const rows = await db.select().from(assets).where(eq(assets.id, assetId)).limit(1);
+  const asset = rows[0];
+  if (!asset) {
+    return renderPlaceholder(assetId);
+  }
+
+  try {
+    const filePath = join(uploadsDir(), asset.storageKey);
+    const bytes = await readFile(filePath);
+    return new NextResponse(new Uint8Array(bytes), {
+      headers: {
+        "content-type": asset.mimeType,
+        "cache-control": "public, max-age=3600",
+      },
+    });
+  } catch {
+    return renderPlaceholder(assetId);
+  }
 }

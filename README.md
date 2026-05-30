@@ -26,6 +26,9 @@ cp .env.example .env
 Required vars:
 
 - `DATABASE_URL` (PostgreSQL connection string)
+- `STUDIO_PASSWORD` (owner login password)
+- `COOKIE_SECRET` (used to sign studio auth cookie)
+- `UPLOADS_DIR` (optional, defaults to `./uploads`; local image uploads stored here)
 
 Example is provided in `.env.example`.
 
@@ -78,3 +81,5 @@ pnpm dev
 - Asset IDs are text IDs (for example `asset-cover-lighthouse`), not UUID-only.
 - `assets.id` is `text` PK.
 - `storybooks.cover_asset_id` is a `text` FK to `assets.id`.
+- Prompt 5 image upload uses local file storage fallback and stores metadata in `assets`.
+- Uploaded media is served via `GET /api/assets/[assetId]`.

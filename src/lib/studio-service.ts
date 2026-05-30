@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import { extname, join } from "node:path";
 
 import { and, asc, eq, sql } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
-import { pages, storybooks, viewEvents } from "@/db/schema";
+import { assets, pages, storybooks, viewEvents } from "@/db/schema";
 import { PageContent, PageSide, type PageContent as PageContentType, type PageSide as PageSideType } from "@/lib/stories/schema";
 
 export interface StudioStorybookRow {
@@ -29,6 +31,25 @@ export interface StudioPageRow {
 export interface StudioStorybookDetail extends StudioStorybookRow {
   theme: Record<string, unknown> | null;
   pages: StudioPageRow[];
+}
+
+const ALLOWED_IMAGE_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+
+function uploadsDir(): string {
+  return process.env.UPLOADS_DIR || join(process.cwd(), "uploads");
+}
+
+function extensionForMimeType(mimeType: string): string {
+  if (mimeType === "image/jpeg") return ".jpg";
+  if (mimeType === "image/png") return ".png";
+  if (mimeType === "image/webp") return ".webp";
+  if (mimeType === "image/gif") return ".gif";
+  return extname(mimeType) || ".bin";
 }
 
 function slugify(input: string): string {
@@ -388,4 +409,60 @@ export async function movePageDown(pageId: string): Promise<void> {
   await db.update(pages).set({ position: page.position + 1 }).where(eq(pages.id, page.id));
   await normalizePagePositions(page.storybookId);
   await db.update(storybooks).set({ updatedAt: new Date() }).where(eq(storybooks.id, page.storybookId));
+}
+
+export async function uploadImageAssetForPage(input: {
+  storybookId: string;
+  pageId: string;
+  fileName: string;
+  mimeType: string;
+  bytes: Buffer;
+  width?: number;
+  height?: number;
+}): Promise<{ assetId: string }> {
+  const db = getDb();
+  if (!ALLOWED_IMAGE_MIME_TYPES.has(input.mimeType)) {
+    throw new Error("Unsupported image type");
+  }
+
+  const pageRows = await db
+    .select()
+    .from(pages)
+    .where(and(eq(pages.id, input.pageId), eq(pages.storybookId, input.storybookId)))
+    .limit(1);
+  const page = pageRows[0];
+  if (!page) throw new Error("Page not found");
+
+  const parsedContent = PageContent.parse(page.content);
+  if (parsedContent.kind !== "image") {
+    throw new Error("Uploads are only enabled for image pages");
+  }
+
+  const assetId = `asset-upload-${randomUUID()}`;
+  const ext = extensionForMimeType(input.mimeType);
+  const storageKey = `${assetId}${ext}`;
+  const filePath = join(uploadsDir(), storageKey);
+
+  await mkdir(uploadsDir(), { recursive: true });
+  await writeFile(filePath, input.bytes);
+
+  await db.insert(assets).values({
+    id: assetId,
+    storageKey,
+    mimeType: input.mimeType,
+    bytes: input.bytes.length,
+    width: input.width ?? null,
+    height: input.height ?? null,
+  });
+
+  await updatePage({
+    pageId: input.pageId,
+    side: page.side,
+    content: {
+      ...parsedContent,
+      assetId,
+    },
+  });
+
+  return { assetId };
 }

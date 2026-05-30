@@ -14,6 +14,8 @@ import {
 } from "@/lib/studio-service";
 import type { PageContent } from "@/lib/stories/schema";
 import { DeletePageForm } from "@/components/studio/delete-page-form";
+import { ImageUploadForm } from "@/components/studio/image-upload-form";
+import { getAssetUrl } from "@/lib/assets";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -39,7 +41,7 @@ function contentPreview(content: PageContent): string {
   return `${source} poster=${content.poster}`;
 }
 
-function PageEditFields({ page }: { page: StudioPageRow }) {
+function PageEditFields({ storybookId, page }: { storybookId: string; page: StudioPageRow }) {
   if (page.content.kind === "text") {
     return (
       <>
@@ -70,6 +72,17 @@ function PageEditFields({ page }: { page: StudioPageRow }) {
           <option value="contain">contain</option>
         </select>
         <input name="caption" defaultValue={page.content.caption || ""} placeholder="Caption (optional)" style={{ padding: "0.5rem" }} />
+        <p style={{ margin: 0, fontSize: 13, color: "#4b5563" }}>
+          Current image asset: <code>{page.content.assetId || "none"}</code>
+        </p>
+        {page.content.assetId ? (
+          <img
+            src={getAssetUrl(page.content.assetId)}
+            alt="Current page asset preview"
+            style={{ width: 180, height: 120, objectFit: "cover", borderRadius: 6, border: "1px solid #e5e7eb" }}
+          />
+        ) : null}
+        <ImageUploadForm storybookId={storybookId} pageId={page.id} currentAssetId={page.content.assetId} />
       </>
     );
   }
@@ -91,6 +104,7 @@ function PageEditFields({ page }: { page: StudioPageRow }) {
           muted
           <input name="muted" type="checkbox" defaultChecked={page.content.muted} style={{ marginLeft: "0.4rem" }} />
         </label>
+        <p style={{ margin: 0, fontSize: 13, color: "#4b5563" }}>Video uploads coming soon. Use assetId/poster fields for now.</p>
       </>
     );
   }
@@ -118,6 +132,7 @@ function PageEditFields({ page }: { page: StudioPageRow }) {
         interactive
         <input name="interactive" type="checkbox" defaultChecked={page.content.interactive} style={{ marginLeft: "0.4rem" }} />
       </label>
+      <p style={{ margin: 0, fontSize: 13, color: "#4b5563" }}>Embed bundle uploads coming soon. Use source/poster fields for now.</p>
     </>
   );
 }
@@ -309,7 +324,7 @@ export default async function StudioStorybookPage({ params }: Props) {
                   <option value="right">right</option>
                 </select>
               </label>
-              <PageEditFields page={page} />
+              <PageEditFields storybookId={storybook.id} page={page} />
               <button type="submit" style={{ padding: "0.6rem", cursor: "pointer" }}>
                 Save Page
               </button>
