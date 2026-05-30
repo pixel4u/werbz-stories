@@ -191,7 +191,7 @@ export default async function StudioPage({
                 <input
                   name="coverAssetId"
                   defaultValue={book.coverAssetId || ""}
-                  placeholder="Cover asset ID"
+                  placeholder="Library thumbnail asset ID (book cover = page 1)"
                   style={{ padding: "0.5rem" }}
                 />
                 <select name="status" defaultValue={book.status} style={{ padding: "0.5rem" }}>

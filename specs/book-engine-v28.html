@@ -644,7 +644,7 @@
       if (config.showGutter) bookGroup.add(gutterShadow);
       if (config.showSpine) bookGroup.add(spineMesh);
       keepGutterVisible();
-      applyCoverLayout(false);
+      applyCoverLayout();
       updateStatus();
     }
     function updateStatus() {
@@ -658,59 +658,155 @@
       prevBtn.disabled = spreadIndex === 0; nextBtn.disabled = spreadIndex >= pages.length - 2;
     }
 
-    /* ---------------- Closed-book / cover layout ---------------- */
-    // Snap the book to the closed (single-page, centered) or open (full spread)
-    // layout. When closed, the visible cover page is the only sheet shown and
-    // the whole book is shifted so that page sits in the middle of the screen.
-    function applyCoverLayout(animated) {
-      // Front cover = first page, which lives on the LEFT of the opening spread,
-      // so closed we show the left page and shift the book right to center it.
-      // Back cover = last page, on the RIGHT of the final spread, so we show the
-      // right page and shift the book left to center it.
-      const targetShift = coverMode ? (coverSide === "front" ? PAGE_W / 2 : -PAGE_W / 2) : 0;
-      const showLeft = !coverMode || coverSide === "front";
-      const showRight = !coverMode || coverSide === "back";
+    /* ---------------- Closed-book (real 3D cover) ----------------
+       When closed we hide the flat open spread entirely and show a single
+       solid 3D book object: a thick cover board carrying the cover artwork,
+       the page-block thickness on three visible edges, and a spine on the
+       binding edge. The whole thing is centered and tilted slightly toward
+       the viewer so it reads as a real closed hardback. Opening crossfades
+       to the flat spread with a short laying-open motion. */
+    let closedBookGroup = null;
 
-      if (leftPageMesh) leftPageMesh.visible = showLeft;
-      if (rightPageMesh) rightPageMesh.visible = showRight;
-      if (leftStack) leftStack.visible = showLeft;
-      if (rightStack) rightStack.visible = showRight;
-      if (leftStackLines) leftStackLines.visible = showLeft;
-      if (rightStackLines) rightStackLines.visible = showRight;
-      // The center seam (spine + gutter) only reads inside an open book.
-      if (spineMesh) spineMesh.visible = !coverMode && config.showSpine;
-      if (gutterShadow) gutterShadow.visible = !coverMode && config.showGutter;
+    function createClosedBook(side) {
+      // side === "front" => front cover faces up, binding (spine) on the left.
+      // side === "back"  => back cover faces up, binding on the right.
+      const group = new THREE.Group();
+      const t = Math.max(0.18, config.stackThickness);   // visible page-block depth
+      const coverThick = 0.06;                            // hardcover board thickness
+      const overhang = 0.06;                              // board overhangs the pages
+      const W = PAGE_W, H = PAGE_H;
+      const sign = side === "back" ? -1 : 1;              // binding side
 
-      if (animated && gsapInstance) {
-        gsapInstance.to(bookGroup.position, { x: targetShift, duration: 0.6, ease: "power3.inOut" });
+      const coverTexIndex = side === "front" ? 0 : pages.length - 1;
+      const srcTex = pageTextures[coverTexIndex] || null;
+      // The flat-page canvas is pre-flipped for the page mesh UVs. On the board's
+      // top (+Y) face that reads upside-down, so use an independent clone with a
+      // corrected vertical flip rather than mutating the shared page texture.
+      let coverTex = null;
+      if (srcTex && srcTex.image) {
+        coverTex = new THREE.CanvasTexture(srcTex.image);
+        coverTex.colorSpace = THREE.SRGBColorSpace;
+        coverTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        coverTex.center.set(0.5, 0.5);
+        coverTex.flipY = true;
+        coverTex.repeat.set(1, -1);
+        coverTex.needsUpdate = true;
+      }
+
+      // --- Page block (the stack of sheets) ---
+      const blockMat = new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.95, metalness: 0 });
+      const block = new THREE.Mesh(new THREE.BoxGeometry(W, t, H), blockMat);
+      block.position.set(0, 0, 0);
+      block.castShadow = true; block.receiveShadow = true;
+      group.add(block);
+
+      // Fine page-edge lines around the block for stacked-paper depth.
+      const lineMat = new THREE.LineBasicMaterial({ color: 0xc4c4c4, transparent: true, opacity: 0.5 });
+      for (let i = 1; i < 22; i++) {
+        const y = t / 2 - (i / 22) * t;
+        const ring = [
+          new THREE.Vector3(-W / 2, y, -H / 2), new THREE.Vector3(W / 2, y, -H / 2),
+          new THREE.Vector3(W / 2, y, H / 2), new THREE.Vector3(-W / 2, y, H / 2),
+          new THREE.Vector3(-W / 2, y, -H / 2)
+        ];
+        group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(ring), lineMat));
+      }
+
+      // --- Cover board (carries the cover artwork on its top face) ---
+      const boardMatSide = new THREE.MeshStandardMaterial({ color: 0xdedede, roughness: 0.7, metalness: 0.02 });
+      const boardMatTop = new THREE.MeshBasicMaterial({ map: coverTex, color: 0xffffff, toneMapped: false });
+      // Box face order: +X,-X,+Y,-Y,+Z,-Z ; top face is +Y (index 2).
+      const boardMats = [boardMatSide, boardMatSide, boardMatTop, boardMatSide, boardMatSide, boardMatSide];
+      const board = new THREE.Mesh(
+        new THREE.BoxGeometry(W + overhang * 2, coverThick, H + overhang * 2),
+        boardMats
+      );
+      board.position.set(0, t / 2 + coverThick / 2, 0);
+      board.castShadow = true; board.receiveShadow = true;
+      group.add(board);
+
+      // --- Spine on the binding edge ---
+      const spineMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(config.spineColor), roughness: 0.75, metalness: 0.03 });
+      const spineH = t + coverThick + 0.01;
+      const spine = new THREE.Mesh(new THREE.BoxGeometry(coverThick, spineH, H + overhang * 2), spineMat);
+      spine.position.set(sign * (W / 2 + overhang + coverThick / 2 - 0.005), (t + coverThick) / 2 - t / 2, 0);
+      spine.castShadow = true; spine.receiveShadow = true;
+      group.add(spine);
+
+      // Sit the closed book on the table. A modest tilt toward the viewer lets
+      // the page-block thickness and spine read under the near-top-down camera.
+      group.position.y = 0.02;
+      group.position.z = 0.12;
+      group.rotation.x = -0.28;
+      return group;
+    }
+
+    function showClosedBook(side) {
+      hideOpenSpread(true);
+      if (closedBookGroup) { disposeClosedBook(); }
+      closedBookGroup = createClosedBook(side);
+      bookGroup.add(closedBookGroup);
+    }
+    function disposeClosedBook() {
+      if (!closedBookGroup) return;
+      closedBookGroup.traverse((o) => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) {
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          mats.forEach((m) => {
+            // The cover board's top map is a private clone (not a shared page
+            // texture), so dispose it explicitly; never dispose pageTextures.
+            if (m && m.map && !pageTextures.includes(m.map)) m.map.dispose();
+            if (m && m.dispose) m.dispose();
+          });
+        }
+      });
+      if (closedBookGroup.parent) closedBookGroup.parent.remove(closedBookGroup);
+      closedBookGroup = null;
+    }
+    function hideOpenSpread(hide) {
+      const v = !hide;
+      [leftPageMesh, rightPageMesh, leftStack, rightStack, leftStackLines, rightStackLines].forEach((m) => { if (m) m.visible = v; });
+      if (spineMesh) spineMesh.visible = v && config.showSpine;
+      if (gutterShadow) gutterShadow.visible = v && config.showGutter;
+      if (coverBase) coverBase.visible = v && config.showCover;
+    }
+
+    // Snap layout based on current coverMode (called at the end of buildBook).
+    function applyCoverLayout() {
+      bookGroup.position.x = 0;
+      if (coverMode) {
+        showClosedBook(coverSide);
       } else {
-        bookGroup.position.x = targetShift;
+        disposeClosedBook();
+        hideOpenSpread(false);
       }
     }
 
     // Enter the closed cover (front at start, back at end).
-    // animated=true plays the close (spread folding shut) when arriving from a spread.
     function enterCover(side, animated) {
       if (!coverEnabled) return;
       coverMode = true;
       coverSide = side;
       cleanupActiveFlip();
-      buildBook();              // buildBook() -> applyCoverLayout(false) snaps to closed
-      if (animated) {
-        bookGroup.position.x = 0; // start from the open position, then fold shut
-        applyCoverLayout(true);
+      buildBook();              // buildBook() -> applyCoverLayout() builds the closed book
+      if (animated && closedBookGroup && gsapInstance) {
+        // Play a short close: book drops/rotates shut.
+        closedBookGroup.scale.set(1.04, 1.04, 1.04);
+        gsapInstance.fromTo(closedBookGroup.scale, { x: 1.04, y: 1.04, z: 1.04 }, { x: 1, y: 1, z: 1, duration: 0.5, ease: "power3.out" });
+        gsapInstance.fromTo(closedBookGroup.rotation, { x: -0.12 }, { x: -0.28, duration: 0.5, ease: "power3.out" });
       }
       updateStatus();
     }
 
-    // Open the front cover into the first spread, or close from the first spread.
+    // Open the closed front cover into the first spread.
     function openFrontCover() {
       if (!coverMode || coverSide !== "front") return;
-      coverMode = false;
-      spreadIndex = 0;
-      buildBook();
-      applyCoverLayout(true);
-      updateStatus();
+      playOpen("front", () => {
+        coverMode = false;
+        spreadIndex = 0;
+        buildBook();
+      });
     }
     function closeToFrontCover() {
       if (coverMode || spreadIndex !== 0) return;
@@ -718,15 +814,41 @@
     }
     function openBackCover() {
       if (!coverMode || coverSide !== "back") return;
-      coverMode = false;
-      spreadIndex = Math.max(0, pages.length - 2);
-      buildBook();
-      applyCoverLayout(true);
-      updateStatus();
+      playOpen("back", () => {
+        coverMode = false;
+        spreadIndex = Math.max(0, pages.length - 2);
+        buildBook();
+      });
     }
     function closeToBackCover() {
       if (coverMode) return;
       enterCover("back", true);
+    }
+
+    // Lay the closed book open: lift + flatten the closed object, then reveal
+    // the flat spread underneath. Avoids z-fighting by never overlapping a flat
+    // page with the closed board at the same depth.
+    function playOpen(side, commit) {
+      if (isAnimating) return;
+      isAnimating = true;
+      const cb = closedBookGroup;
+      const done = () => {
+        commit();                 // rebuild flat spread (this disposes the closed book via applyCoverLayout)
+        // brief settle of the freshly revealed spread
+        if (gsapInstance) {
+          bookGroup.scale.set(0.985, 0.985, 0.985);
+          gsapInstance.to(bookGroup.scale, { x: 1, y: 1, z: 1, duration: 0.32, ease: "power2.out", onComplete: () => { isAnimating = false; } });
+        } else {
+          isAnimating = false;
+        }
+        updateStatus();
+      };
+      if (cb && gsapInstance) {
+        gsapInstance.to(cb.rotation, { x: -0.5, duration: 0.34, ease: "power2.in" });
+        gsapInstance.to(cb.scale, { x: 1.06, y: 1.06, z: 1.06, duration: 0.34, ease: "power2.in", onComplete: done });
+      } else {
+        done();
+      }
     }
 
     function keepGutterVisible() {

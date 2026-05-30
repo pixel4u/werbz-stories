@@ -303,23 +303,13 @@ function buildEngineHtml(slug: string, debug: boolean): string {
             },
           }));
 
-        // If the storybook defines a dedicated cover image and the first page is
-        // not already that image, prepend it as page 0 (the closed front cover).
-        const coverAssetId = storybook.coverAssetId;
-        const firstIsCover = pages[0] && pages[0].kind === 'image' && pages[0].assetId === coverAssetId;
-        if (coverAssetId && !firstIsCover) {
-          pages.unshift({
-            kind: 'image',
-            assetId: coverAssetId,
-            fit: 'cover',
-            num: 0,
-            __meta: { id: 'cover-page', position: -1, side: 'left' },
-          });
-        }
+        // Cover model: the FIRST page is the closed front cover and the LAST
+        // page is the closed back cover (handled natively by the engine). The
+        // storybook's coverAssetId stays purely the Library thumbnail and is
+        // intentionally NOT injected as an extra page here.
 
         // Page turns happen in pairs, so an odd page count needs one trailing
-        // blank. The back cover is the last page; pad before it so the cover
-        // stays a real content page.
+        // blank so the back cover stays a real content page.
         if (pages.length % 2 === 1) {
           pages.push({
             kind: 'text',

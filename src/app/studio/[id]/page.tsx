@@ -311,7 +311,12 @@ export default async function StudioStorybookPage({ params }: Props) {
       </section>
 
       <section style={{ display: "grid", gap: "1rem", marginTop: "1rem" }}>
-        {storybook.pages.map((page) => (
+        {storybook.pages.map((page, index) => {
+          // The reader treats the first page as the closed front cover and the
+          // last page as the closed back cover.
+          const coverRole =
+            index === 0 ? "FRONT COVER" : index === storybook.pages.length - 1 && storybook.pages.length > 1 ? "BACK COVER" : null;
+          return (
           <article key={page.id} style={{ border: "1px solid #ddd", borderRadius: 12, padding: "0.9rem", background: "#fff" }}>
             <div style={{ marginBottom: "0.6rem" }}>
               <strong>Page {page.position + 1}</strong>{" "}
@@ -327,6 +332,23 @@ export default async function StudioStorybookPage({ params }: Props) {
               >
                 {page.content.kind}
               </span>
+              {coverRole ? (
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    border: "1px solid #f2b441",
+                    background: "#fdf4dd",
+                    borderRadius: 999,
+                    padding: "0.2rem 0.55rem",
+                    marginLeft: 6,
+                    color: "#8a6400",
+                    letterSpacing: "0.04em",
+                  }}
+                >
+                  {coverRole}
+                </span>
+              ) : null}
               <p style={{ margin: "0.25rem 0", color: "#555" }}>
                 id: <code>{page.id}</code> | position: {page.position} | side: <code>{page.side}</code>
               </p>
@@ -370,7 +392,8 @@ export default async function StudioStorybookPage({ params }: Props) {
               <DeletePageForm storybookId={storybook.id} pageId={page.id} action={deletePageAction} />
             </div>
           </article>
-        ))}
+          );
+        })}
       </section>
     </main>
   );
