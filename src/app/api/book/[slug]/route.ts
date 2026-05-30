@@ -45,6 +45,7 @@ function buildEngineHtml(slug: string, debug: boolean): string {
       } else if (kind === 'image') {
         drawImagePage(ctx, canvas, page);
       } else if (kind === 'video') {
+        // Normal mode shows the poster image (async) on clean paper; debug adds labels.
         drawMediaPlaceholder(ctx, canvas, {
           label: 'VIDEO',
           line1: 'asset: ' + (page.assetId || 'missing-asset-id'),
@@ -60,7 +61,7 @@ function buildEngineHtml(slug: string, debug: boolean): string {
           line2: 'poster: ' + (page.poster || 'missing-poster'),
         });
       } else {
-        drawTextPage(ctx, canvas, { kind: 'text', title: 'Unsupported page', body: 'Unknown page type.' });
+        drawTextPage(ctx, canvas, { kind: 'text', title: '', body: '' });
       }
 
       if (DEBUG_MODE) {
@@ -73,10 +74,14 @@ function buildEngineHtml(slug: string, debug: boolean): string {
       texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
       texture.needsUpdate = true;
 
-      // Async-load any page photo, then redraw the page with it. Covers both
-      // image pages (assetId) and text pages with a background photo
-      // (backgroundAssetId, e.g. the cover: picture + title).
-      const photoAssetId = kind === 'image' ? page?.assetId : (kind === 'text' ? page?.backgroundAssetId : null);
+      // Async-load any page photo, then redraw the page with it:
+      //  - image page  -> assetId
+      //  - text page   -> backgroundAssetId (cover: picture + title)
+      //  - video/embed -> poster image so the leaf shows real artwork, not a blank
+      const photoAssetId =
+        kind === 'image' ? page?.assetId :
+        kind === 'text' ? page?.backgroundAssetId :
+        (kind === 'video' || kind === 'embed') ? page?.poster : null;
       if (photoAssetId) {
         const image = new Image();
         image.crossOrigin = 'anonymous';
@@ -86,7 +91,8 @@ function buildEngineHtml(slug: string, debug: boolean): string {
           ctx.scale(config.flipTextH ? -1 : 1, config.flipTextV ? -1 : 1);
           ctx.translate(-canvas.width / 2, -canvas.height / 2);
           if (kind === 'image') drawImagePage(ctx, canvas, page, image);
-          else drawTextPage(ctx, canvas, page, image);
+          else if (kind === 'text') drawTextPage(ctx, canvas, page, image);
+          else drawImagePage(ctx, canvas, { fit: 'cover', caption: page.caption }, image); // video/embed poster
           if (DEBUG_MODE) drawDebugOverlay(ctx, page);
           ctx.restore();
           texture.needsUpdate = true;
@@ -147,15 +153,18 @@ function buildEngineHtml(slug: string, debug: boolean): string {
       ctx.textAlign = align;
       ctx.globalAlpha = 1;
       ctx.font = '700 96px Georgia, serif';
-      wrapText(ctx, page.title || 'Untitled', titleX, 300, maxWidth, 108);
+      if (page.title) wrapText(ctx, page.title, titleX, 300, maxWidth, 108);
 
       ctx.globalAlpha = (page.background || hasPhoto) ? 0.95 : 0.72;
       ctx.font = "400 42px 'Helvetica Neue', sans-serif";
-      wrapText(ctx, page.body || '', bodyX, 610, maxWidth, 62);
-      ctx.globalAlpha = 0.45;
-      ctx.font = '700 28px Georgia, serif';
-      ctx.textAlign = 'left';
-      ctx.fillText('Page ' + (page.num || 1), 88, 1500);
+      if (page.body) wrapText(ctx, page.body, bodyX, 610, maxWidth, 62);
+      // Footer page number — only on readable content pages (not covers/blanks).
+      if (page.readerNum != null) {
+        ctx.globalAlpha = hasPhoto ? 0.7 : 0.45;
+        ctx.font = '700 28px Georgia, serif';
+        ctx.textAlign = 'left';
+        ctx.fillText('Page ' + page.readerNum, 88, 1500);
+      }
       ctx.globalAlpha = 1;
     }
 
@@ -220,24 +229,23 @@ function buildEngineHtml(slug: string, debug: boolean): string {
     }
 
     function drawMediaPlaceholder(ctx, canvas, opts) {
-      const label = opts.label;
-      const line1 = opts.line1;
-      const line2 = opts.line2;
-
+      // Clean, reader-facing placeholder. Never shows internal labels like
+      // "IMAGE PAGE" / Asset / Details in normal mode — only a soft neutral
+      // sheet. The technical fields are surfaced by the debug overlay instead.
       drawNeutralPaper(ctx, canvas);
-
-      const glow = ctx.createRadialGradient(240, 190, 20, 240, 190, 780);
-      glow.addColorStop(0, 'rgba(255,255,255,0.26)');
+      const glow = ctx.createRadialGradient(canvas.width / 2, canvas.height * 0.42, 40, canvas.width / 2, canvas.height * 0.42, 900);
+      glow.addColorStop(0, 'rgba(255,255,255,0.30)');
       glow.addColorStop(1, 'rgba(255,255,255,0)');
       ctx.fillStyle = glow;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      ctx.fillStyle = '#222';
-      ctx.font = '700 58px Georgia, serif';
-      ctx.fillText(label + ' PAGE', 88, 180);
-
-      drawCard(ctx, 88, 260, 1024, 180, '#2b2b2b', false, 'Asset', line1 || 'n/a');
-      drawCard(ctx, 88, 470, 1024, 180, '#2b2b2b', false, 'Details', line2 || 'Path A placeholder texture');
+      if (DEBUG_MODE) {
+        ctx.fillStyle = '#222';
+        ctx.font = '700 58px Georgia, serif';
+        ctx.fillText((opts.label || 'MEDIA') + ' PAGE', 88, 180);
+        drawCard(ctx, 88, 260, 1024, 180, '#2b2b2b', false, 'Asset', opts.line1 || 'n/a');
+        drawCard(ctx, 88, 470, 1024, 180, '#2b2b2b', false, 'Details', opts.line2 || 'placeholder');
+      }
     }
 
     function drawDebugOverlay(ctx, page) {
@@ -323,18 +331,22 @@ function buildEngineHtml(slug: string, debug: boolean): string {
           applyLights();
         }
 
-        pages = [...storybook.pages]
-          .sort((a, b) => a.position - b.position)
-          .map((page, idx) => ({
-            ...page.content,
-            num: idx + 1,
-            fit: page.content.fit || 'cover',
-            __meta: {
-              id: page.id,
-              position: page.position,
-              side: page.side,
-            },
-          }));
+        const sorted = [...storybook.pages].sort((a, b) => a.position - b.position);
+        const lastIdx = sorted.length - 1;
+        pages = sorted.map((page, idx) => ({
+          ...page.content,
+          // Cover model: page 0 is the front cover, last page is the back cover.
+          // Neither is a "readable page", so they carry no reader page number;
+          // content pages are numbered 1..N starting after the front cover.
+          isCover: idx === 0 || (idx === lastIdx && lastIdx > 0),
+          readerNum: idx === 0 || (idx === lastIdx && lastIdx > 0) ? null : idx,
+          fit: page.content.fit || 'cover',
+          __meta: {
+            id: page.id,
+            position: page.position,
+            side: page.side,
+          },
+        }));
 
         // Cover model: the FIRST page is the closed front cover and the LAST
         // page is the closed back cover (handled natively by the engine). The
@@ -342,14 +354,17 @@ function buildEngineHtml(slug: string, debug: boolean): string {
         // intentionally NOT injected as an extra page here.
 
         // Page turns happen in pairs, so an odd page count needs one trailing
-        // blank so the back cover stays a real content page.
+        // blank. Insert it BEFORE the back cover so the back cover stays the
+        // real last page and is never mixed into the content list.
         if (pages.length % 2 === 1) {
-          pages.push({
+          const insertAt = Math.max(1, pages.length - 1);
+          pages.splice(insertAt, 0, {
             kind: 'text',
             title: '',
             body: '',
-            num: pages.length + 1,
-            __meta: { id: 'padding-page', position: pages.length, side: 'right' },
+            isCover: false,
+            readerNum: null,
+            __meta: { id: 'padding-page', position: insertAt, side: insertAt % 2 === 0 ? 'left' : 'right' },
           });
         }
 

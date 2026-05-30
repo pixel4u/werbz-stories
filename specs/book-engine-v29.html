@@ -141,8 +141,11 @@
       flipShadowStrength: 0.58, flipShadowSoftness: 0.74,
       // Closed-book (cover/back) presentation.
       coverSheen: 0.15,          // subtle vertical gloss gradient on the cover board
-      closedCamHeight: 6.6,      // lower camera while closed -> 3/4 hardback look
-      closedCamTilt: 5.0,        // pull the camera toward the viewer when closed
+      // Closed view uses the SAME flat top framing as the open spread so loading
+      // and opening have no zoom/rotate intro — just a clean front/top cover that
+      // opens like a real book. (Kept as config so it can be tuned if desired.)
+      closedCamHeight: 9.85,
+      closedCamTilt: 1.05,
     };
     let config = { ...DEFAULTS };
 
@@ -552,11 +555,27 @@
       mesh.position.set(sign*PAGE_W/2, -t/2 - 0.035, 0); mesh.castShadow = true; mesh.receiveShadow = true; return mesh;
     }
     function createPaperLayerLines(side) {
+      // Crisp bound-block edge: many fine page lines (CSS-reference inspired),
+      // denser near the top reading surface for a clean stacked-paper look,
+      // wrapping the three open edges (front + both sides), not the spine.
       const sign = side === "right" ? 1 : -1, group = new THREE.Group(), t = config.stackThickness;
-      const lineMat = new THREE.LineBasicMaterial({ color: 0xb0b0b0, transparent: true, opacity: config.layerOpacity });
-      for (let i = 0; i < 18; i++) { const y = -0.035 - (i / 18) * t;
-        const pts = [ new THREE.Vector3(sign*0.06,y,-PAGE_H/2), new THREE.Vector3(sign*PAGE_W,y,-PAGE_H/2), new THREE.Vector3(sign*PAGE_W,y,PAGE_H/2), new THREE.Vector3(sign*0.06,y,PAGE_H/2) ];
-        group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMat)); }
+      const COUNT = 30;
+      for (let i = 0; i < COUNT; i++) {
+        const f = i / (COUNT - 1);
+        const y = -0.035 - f * t;
+        // Lighter lines near the top, a touch darker deeper down for depth.
+        const shade = 0.74 - f * 0.18;
+        const col = new THREE.Color(shade, shade, shade);
+        const op = config.layerOpacity * (0.55 + 0.45 * (1 - f));
+        const lineMat = new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: Math.min(1, op) });
+        const pts = [
+          new THREE.Vector3(sign * 0.06, y, -PAGE_H / 2),
+          new THREE.Vector3(sign * PAGE_W, y, -PAGE_H / 2),
+          new THREE.Vector3(sign * PAGE_W, y, PAGE_H / 2),
+          new THREE.Vector3(sign * 0.06, y, PAGE_H / 2),
+        ];
+        group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMat));
+      }
       return group;
     }
     function createCoverBase() {
@@ -658,7 +677,17 @@
         nextBtn.disabled = coverSide === "back";
         return;
       }
-      statusText.textContent = "Pages " + (spreadIndex + 1) + "\u2013" + Math.min(spreadIndex + 2, pages.length);
+      // Prefer reader-facing page numbers (covers excluded) supplied by the host
+      // via page.readerNum; fall back to raw 1-based indices for the standalone demo.
+      const left = pages[spreadIndex], right = pages[spreadIndex + 1];
+      const ln = left && left.readerNum != null ? left.readerNum : null;
+      const rn = right && right.readerNum != null ? right.readerNum : null;
+      if (ln != null || rn != null) {
+        const nums = [ln, rn].filter(function (n) { return n != null; });
+        statusText.textContent = nums.length === 2 ? ("Pages " + nums[0] + "\u2013" + nums[1]) : ("Page " + nums[0]);
+      } else {
+        statusText.textContent = "Pages " + (spreadIndex + 1) + "\u2013" + Math.min(spreadIndex + 2, pages.length);
+      }
       prevBtn.disabled = spreadIndex === 0; nextBtn.disabled = spreadIndex >= pages.length - 2;
     }
 
@@ -744,6 +773,9 @@
       }
 
       // --- Cover board (cover artwork + sheen on its top +Y face) ---
+      // The board lives in a hinge pivot at the spine edge so it can swing open
+      // about the spine (like a real hardback front board) without moving the
+      // page block. Board face order: +X,-X,+Y,-Y,+Z,-Z (top is +Y, index 2).
       const boardMatSide = new THREE.MeshStandardMaterial({ color: 0xdcdcdc, roughness: 0.62, metalness: 0.04 });
       const boardMatTop = new THREE.MeshBasicMaterial({ map: coverTex, color: 0xffffff, toneMapped: false });
       const boardMats = [boardMatSide, boardMatSide, boardMatTop, boardMatSide, boardMatSide, boardMatSide];
@@ -751,9 +783,18 @@
         new THREE.BoxGeometry(W + overhang * 2, coverThick, H + overhang * 2),
         boardMats
       );
-      board.position.set(0, t / 2 + coverThick / 2, 0);
+      // Hinge sits at the spine edge, on top of the block.
+      const spineEdgeX = sign * (W / 2 + overhang);
+      const coverHinge = new THREE.Group();
+      coverHinge.position.set(spineEdgeX, t / 2 + coverThick / 2, 0);
+      // Offset the board so it spans from the spine edge across to the free edge,
+      // i.e. centered when the hinge rotation is zero.
+      board.position.set(-spineEdgeX, 0, 0);
       board.castShadow = true; board.receiveShadow = true;
-      group.add(board);
+      coverHinge.add(board);
+      group.add(coverHinge);
+      group.userData.coverHinge = coverHinge;
+      group.userData.openSign = sign; // spine side: front=-1 (spine left), back=+1
 
       // --- Back board (the underside cover the block rests on) ---
       const backBoard = new THREE.Mesh(
@@ -867,39 +908,44 @@
       enterCover("back", true);
     }
 
-    // Lay the closed book open: swing the cover board open on the spine hinge
-    // while the camera glides back to the flat reading view, then commit to the
-    // real spread. No flat page overlaps the board mid-animation, so no z-fight.
+    // Open the book like a real hardback: only the COVER BOARD swings open on
+    // the spine hinge (the page block stays put), revealing the first spread,
+    // and the book settles toward center. No camera zoom/rotate intro.
     function playOpen(side, commit) {
       if (isAnimating) return;
       isAnimating = true;
       const cb = closedBookGroup;
+      const hinge = cb && cb.userData ? cb.userData.coverHinge : null;
+      let committed = false;
       const done = () => {
+        if (committed) return;
+        committed = true;
+        if (hinge && gsapInstance) gsapInstance.killTweensOf(hinge.rotation);
         commit();                 // rebuild flat spread (disposes closed book via applyCoverLayout)
         if (gsapInstance) {
-          bookGroup.scale.set(0.99, 0.99, 0.99);
-          gsapInstance.to(bookGroup.scale, { x: 1, y: 1, z: 1, duration: 0.3, ease: "power2.out", onComplete: () => { isAnimating = false; } });
+          bookGroup.scale.set(0.992, 0.992, 0.992);
+          gsapInstance.to(bookGroup.scale, { x: 1, y: 1, z: 1, duration: 0.28, ease: "power2.out", onComplete: () => { isAnimating = false; } });
         } else {
           isAnimating = false;
         }
         updateStatus();
       };
-      // Camera returns to the open (near-top-down) framing as the cover lifts.
-      coverMode = false;          // so applyCameraForState targets the open view
-      applyCameraForState(true);
-      coverMode = true;           // keep state until commit() rebuilds
-      if (cb && gsapInstance) {
-        // Hinge the whole closed book open about its spine edge. front => spine
-        // on left (open clockwise toward +x); back => spine on right.
-        const sign = side === "back" ? 1 : -1;
-        const hingeX = sign * (PAGE_W / 2);
-        const pivot = new THREE.Group();
-        pivot.position.x = hingeX;
-        bookGroup.add(pivot);
-        cb.position.x -= hingeX;
-        pivot.add(cb);
-        gsapInstance.to(pivot.rotation, { z: sign * (Math.PI * 0.9), duration: 0.5, ease: "power2.in", onComplete: done });
-        gsapInstance.to(pivot.position, { y: 0.05, duration: 0.5, ease: "power2.in" });
+      if (hinge && gsapInstance) {
+        // Front cover: spine on the LEFT, board swings up and over to the left
+        // (rotateZ +PI). Back cover: spine on the RIGHT, swings to the right.
+        const openSign = cb.userData.openSign || -1; // -1 front, +1 back
+        const targetZ = -openSign * Math.PI; // front(-1)->+PI (left), back(+1)->-PI (right)
+        gsapInstance.to(hinge.rotation, {
+          z: targetZ,
+          duration: 0.72,
+          ease: "power2.inOut",
+          // Reveal the spread a touch before the board finishes laying down so
+          // there is never a blank frame between cover and pages.
+          onUpdate: function () {
+            if (!committed && this.progress() > 0.62) done();
+          },
+          onComplete: done
+        });
       } else {
         done();
       }
