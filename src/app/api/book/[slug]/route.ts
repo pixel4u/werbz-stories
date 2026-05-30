@@ -275,62 +275,27 @@ function buildEngineHtml(slug: string, debug: boolean): string {
   );
 
   const boot = `
-    let coverOverlayEl = null;
-    let coverModeActive = true;
-    function hideCoverOverlay() {
-      if (!coverOverlayEl) return;
-      coverModeActive = false;
-      coverOverlayEl.style.opacity = '0';
-      setTimeout(() => {
-        if (coverOverlayEl && coverOverlayEl.parentNode) {
-          coverOverlayEl.parentNode.removeChild(coverOverlayEl);
-        }
-      }, 220);
+    let coverModeActive = false;
+    let coverPageInserted = false;
+    function enterCoverMode() {
+      coverModeActive = true;
+      spreadIndex = 0;
+      cleanupActiveFlip();
+      regenerateTextures();
+      buildBook();
+      if (leftPageMesh) leftPageMesh.visible = false;
+      if (rightPageMesh) rightPageMesh.visible = true;
+      if (statusText) statusText.textContent = 'Cover';
+      if (prevBtn) prevBtn.disabled = true;
     }
 
-    function showCoverOverlay(storybook) {
-      const coverAssetId = storybook.coverAssetId || (pages[0] && pages[0].kind === 'image' ? pages[0].assetId : null);
-      coverOverlayEl = document.createElement('div');
-      coverOverlayEl.style.position = 'fixed';
-      coverOverlayEl.style.inset = '0';
-      coverOverlayEl.style.zIndex = '10000';
-      coverOverlayEl.style.display = 'grid';
-      coverOverlayEl.style.placeItems = 'center';
-      coverOverlayEl.style.background = '#121212';
-      coverOverlayEl.style.transition = 'opacity 220ms ease';
-
-      const card = document.createElement('div');
-      card.style.width = 'min(72vw, 580px)';
-      card.style.aspectRatio = '3 / 4';
-      card.style.borderRadius = '14px';
-      card.style.boxShadow = '0 18px 40px rgba(0,0,0,0.45)';
-      card.style.overflow = 'hidden';
-      card.style.background = '#f3f0e8';
-      card.style.display = 'flex';
-      card.style.flexDirection = 'column';
-
-      const img = document.createElement('img');
-      img.alt = (storybook.title || 'Storybook') + ' cover';
-      img.style.width = '100%';
-      img.style.height = '100%';
-      img.style.objectFit = 'cover';
-      if (coverAssetId) img.src = getAssetUrl(coverAssetId);
-
-      const footer = document.createElement('button');
-      footer.type = 'button';
-      footer.textContent = 'Open story';
-      footer.style.border = '0';
-      footer.style.background = '#111827';
-      footer.style.color = '#fff';
-      footer.style.padding = '12px';
-      footer.style.fontSize = '15px';
-      footer.style.cursor = 'pointer';
-      footer.onclick = () => hideCoverOverlay();
-
-      card.appendChild(img);
-      card.appendChild(footer);
-      coverOverlayEl.appendChild(card);
-      document.body.appendChild(coverOverlayEl);
+    function openFromCover() {
+      coverModeActive = false;
+      spreadIndex = 1;
+      cleanupActiveFlip();
+      regenerateTextures();
+      buildBook();
+      updateStatus();
     }
 
     async function loadStorybookFromApi() {
@@ -362,6 +327,16 @@ function buildEngineHtml(slug: string, debug: boolean): string {
           }));
 
         const coverAssetId = storybook.coverAssetId || (pages[0] && pages[0].kind === 'image' ? pages[0].assetId : null);
+        if (coverAssetId) {
+          coverPageInserted = true;
+          pages.unshift({
+            kind: 'image',
+            assetId: coverAssetId,
+            fit: 'cover',
+            num: 0,
+            __meta: { id: 'cover-page', position: -1, side: 'right' },
+          });
+        }
 
         if (pages.length % 2 === 1) {
           const last = pages[pages.length - 1] || { kind: 'text', title: ' ', body: ' ' };
@@ -376,10 +351,26 @@ function buildEngineHtml(slug: string, debug: boolean): string {
         cleanupActiveFlip();
         regenerateTextures();
         buildBook();
-        if (coverModeActive && leftPageMesh) {
-          leftPageMesh.visible = false;
+        if (coverPageInserted) {
+          enterCoverMode();
         }
-        showCoverOverlay(storybook);
+
+        const baseGoNext = goNext;
+        const baseGoPrevious = goPrevious;
+        goNext = function() {
+          if (coverModeActive) {
+            openFromCover();
+            return;
+          }
+          baseGoNext();
+        };
+        goPrevious = function() {
+          if (!coverModeActive && coverPageInserted && spreadIndex <= 1 && !isAnimating) {
+            enterCoverMode();
+            return;
+          }
+          baseGoPrevious();
+        };
       } catch (err) {
         console.error(err);
       }
