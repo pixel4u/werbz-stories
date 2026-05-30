@@ -276,8 +276,10 @@ function buildEngineHtml(slug: string, debug: boolean): string {
 
   const boot = `
     let coverOverlayEl = null;
+    let coverModeActive = true;
     function hideCoverOverlay() {
       if (!coverOverlayEl) return;
+      coverModeActive = false;
       coverOverlayEl.style.opacity = '0';
       setTimeout(() => {
         if (coverOverlayEl && coverOverlayEl.parentNode) {
@@ -360,30 +362,12 @@ function buildEngineHtml(slug: string, debug: boolean): string {
           }));
 
         const coverAssetId = storybook.coverAssetId || (pages[0] && pages[0].kind === 'image' ? pages[0].assetId : null);
-        if (coverAssetId) {
-          pages.unshift({
-            kind: 'image',
-            assetId: coverAssetId,
-            fit: 'cover',
-            num: 0,
-            __meta: { id: 'cover-page', position: -1, side: 'right' },
-          });
-          pages.push({
-            kind: 'image',
-            assetId: coverAssetId,
-            fit: 'cover',
-            num: pages.length + 1,
-            __meta: { id: 'ending-page', position: 99999, side: 'left' },
-          });
-        }
 
         if (pages.length % 2 === 1) {
+          const last = pages[pages.length - 1] || { kind: 'text', title: ' ', body: ' ' };
           pages.push({
-            kind: 'text',
-            title: ' ',
-            body: ' ',
+            ...last,
             num: pages.length + 1,
-            align: 'left',
             __meta: { id: 'padding-page', position: pages.length, side: 'right' },
           });
         }
@@ -392,6 +376,9 @@ function buildEngineHtml(slug: string, debug: boolean): string {
         cleanupActiveFlip();
         regenerateTextures();
         buildBook();
+        if (coverModeActive && leftPageMesh) {
+          leftPageMesh.visible = false;
+        }
         showCoverOverlay(storybook);
       } catch (err) {
         console.error(err);
