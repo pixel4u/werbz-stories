@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { NextResponse } from "next/server";
 
 function buildEngineHtml(slug: string, debug: boolean): string {
-  const sourcePath = join(process.cwd(), "specs", "book-engine-v27.html");
+  const sourcePath = join(process.cwd(), "specs", "book-engine-v28.html");
   let html = readFileSync(sourcePath, "utf8");
 
   html = html.replace(
@@ -96,7 +96,7 @@ function buildEngineHtml(slug: string, debug: boolean): string {
     }
 
     function drawTextPage(ctx, canvas, page) {
-      const bg = page.background || '#ffffff';
+      const bg = '#ffffff';
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 

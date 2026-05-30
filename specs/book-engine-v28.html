@@ -1,0 +1,1138 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flipbook v26 — Solid Page Flip + Gutter Under Sheet</title>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden;
+      font-family: "Helvetica Neue", Helvetica, system-ui, sans-serif;
+      background: radial-gradient(circle at top, #353a45 0%, #151821 44%, #07080b 100%);
+      color: white; user-select: none; -webkit-user-select: none; touch-action: none; }
+    body { display: flex; align-items: center; justify-content: center; }
+    #app { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
+    canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+    canvas:active { cursor: grabbing; }
+
+    .badge { position: absolute; top: 22px; left: 50%; transform: translateX(-50%); padding: 10px 14px; border-radius: 999px;
+      background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14); backdrop-filter: blur(12px);
+      color: rgba(255,255,255,0.78); font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; z-index: 10; pointer-events: none; }
+    .hint { position: absolute; left: 50%; bottom: 60px; transform: translateX(-50%); font-size: 13px; opacity: 0.5; text-align: center; z-index: 10; pointer-events: none; }
+    .status { position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); min-width: 160px; text-align: center; font-size: 14px; opacity: 0.7; z-index: 10; pointer-events: none; }
+
+    .nav-arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 56px; height: 56px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center; font-size: 32px; line-height: 0; padding-bottom: 4px; font-weight: 300;
+      color: #e8e3d6; cursor: pointer; z-index: 20; background: rgba(20,22,30,0.5); border: 1px solid rgba(255,255,255,0.16);
+      backdrop-filter: blur(10px); transition: background .15s, opacity .15s, transform .1s; }
+    .nav-arrow:hover { background: rgba(242,180,65,0.22); border-color: rgba(242,180,65,0.5); }
+    .nav-arrow:active { transform: translateY(-50%) scale(0.94); }
+    .nav-arrow:disabled { opacity: 0.2; cursor: not-allowed; }
+    .nav-arrow.left { left: 5%; }
+    .nav-arrow.right { right: 5%; }
+
+    #deck { position: absolute; left: 18px; bottom: 18px; z-index: 30; width: 300px; max-height: 78vh; display: flex; flex-direction: column;
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: #e8e3d6;
+      background: linear-gradient(180deg, rgba(20,22,30,0.92), rgba(12,13,18,0.94)); border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 14px; box-shadow: 0 18px 50px rgba(0,0,0,0.55); backdrop-filter: blur(16px); overflow: hidden; }
+    #deckHead { display: flex; align-items: center; justify-content: space-between; padding: 11px 14px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.03); }
+    #deckHead .title { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #f2b441; font-weight: 700; }
+    #deckHead .chev { font-size: 12px; opacity: 0.6; }
+    #deckBody { overflow-y: auto; padding: 6px 12px 12px; }
+    #deck.collapsed #deckBody { display: none; }
+    .group { margin-top: 12px; }
+    .group > .glabel { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(232,227,214,0.45); margin: 4px 0 8px; font-weight: 700; }
+    .row { margin: 9px 0; }
+    .row .top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+    .row .name { font-size: 11px; color: rgba(232,227,214,0.82); }
+    .row .val { font-size: 11px; color: #f2b441; font-variant-numeric: tabular-nums; }
+    input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 3px; border-radius: 3px; background: rgba(255,255,255,0.14); outline: none; cursor: pointer; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #f2b441; border: 2px solid #1a1c24; cursor: pointer; }
+    input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #f2b441; border: 2px solid #1a1c24; cursor: pointer; }
+    input[type=color] { width: 40px; height: 24px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; background: none; cursor: pointer; padding: 0; }
+    .toggle { display: flex; align-items: center; justify-content: space-between; margin: 9px 0; }
+    .toggle .name { font-size: 11px; color: rgba(232,227,214,0.82); }
+    .sw { width: 38px; height: 20px; border-radius: 999px; background: rgba(255,255,255,0.14); position: relative; cursor: pointer; transition: background 0.15s; }
+    .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #cfc8b8; transition: transform 0.15s; }
+    .sw.on { background: #f2b441; }
+    .sw.on::after { transform: translateX(18px); background: #1a1c24; }
+    .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+    .chip { flex: 1; min-width: 60px; text-align: center; font-size: 10px; padding: 7px 4px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #e8e3d6; cursor: pointer; }
+    .chip:hover { background: rgba(242,180,65,0.16); border-color: rgba(242,180,65,0.4); }
+    .actions { display: flex; gap: 6px; margin-top: 12px; }
+    .actions button { flex: 1; font-family: inherit; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; padding: 9px 6px; border-radius: 8px; cursor: pointer; text-transform: uppercase; border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.06); color: #e8e3d6; }
+    #copyBtn { background: #f2b441; color: #161616; border-color: #f2b441; }
+    .actions button:active { transform: translateY(1px); }
+    #jsonBox { width: 100%; height: 84px; margin-top: 10px; resize: none; font-family: inherit; font-size: 9.5px; line-height: 1.35; color: #b9d6c2; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.10); border-radius: 8px; padding: 8px; }
+
+
+    .pdf-loader { margin: 8px 0 12px; padding: 10px; border-radius: 10px; background: rgba(255,255,255,0.045); border: 1px solid rgba(255,255,255,0.10); }
+    .pdf-loader .glabel { margin-bottom: 8px; }
+    .pdf-url-row { display: flex; gap: 6px; }
+    #pdfUrlInput { flex: 1; min-width: 0; height: 34px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.14); background: rgba(0,0,0,0.28); color: #e8e3d6; padding: 0 9px; font-family: inherit; font-size: 10.5px; outline: none; }
+    #pdfUrlInput::placeholder { color: rgba(232,227,214,0.35); }
+    #loadPdfBtn { height: 34px; border-radius: 8px; border: 1px solid rgba(242,180,65,0.65); background: #f2b441; color: #161616; font-family: inherit; font-size: 10px; font-weight: 800; letter-spacing: 0.06em; cursor: pointer; text-transform: uppercase; padding: 0 10px; }
+    #loadPdfBtn:disabled { opacity: 0.45; cursor: not-allowed; }
+    #pdfLoadStatus { margin-top: 7px; font-size: 10px; line-height: 1.35; color: rgba(232,227,214,0.62); }
+  </style>
+</head>
+
+<body>
+  <div id="app">
+    <div class="badge">Top View / Solid Page Flip</div>
+    <div class="hint">Drag a page from either edge &middot; or use the arrows / &larr; &rarr;</div>
+    <div class="status" id="statusText">Pages 1&ndash;2</div>
+
+    <button class="nav-arrow left" id="prevBtn" aria-label="Previous">&#8249;</button>
+    <button class="nav-arrow right" id="nextBtn" aria-label="Next">&#8250;</button>
+
+    <div id="deck">
+      <div id="deckHead"><span class="title">&#9881; Studio Controls</span><span class="chev" id="chev">&#9662;</span></div>
+      <div id="deckBody">
+        <div class="chips" id="presetChips"></div>
+        <div class="pdf-loader">
+          <div class="glabel">Load PDF from URL</div>
+          <div class="pdf-url-row">
+            <input id="pdfUrlInput" type="url" placeholder="https://example.com/file.pdf" spellcheck="false" />
+            <button id="loadPdfBtn" type="button">Load</button>
+          </div>
+          <div id="pdfLoadStatus">Use a direct public PDF URL. The server must allow CORS.</div>
+        </div>
+        <div id="controls"></div>
+        <div class="actions"><button id="copyBtn">Copy config</button><button id="resetBtn">Reset</button></div>
+        <textarea id="jsonBox" readonly spellcheck="false"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <script type="importmap">
+    { "imports": { "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js" } }
+  </script>
+
+  <script type="module">
+    import * as THREE from "three";
+
+    const app = document.getElementById("app");
+    const prevBtn = document.getElementById("prevBtn");
+    const nextBtn = document.getElementById("nextBtn");
+    const statusText = document.getElementById("statusText");
+    const gsapInstance = window.gsap;
+    const pdfjsLib = window.pdfjsLib;
+    if (pdfjsLib) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    }
+
+    /* ====== CONFIG ====== */
+    const DEFAULTS = {
+      flipTextH: false, flipTextV: true,
+      camHeight: 9.85, camTilt: 1.05, fov: 30, exposure: 1.02,
+      showSpine: true, spineRadius: 0.012, spineColor: "#a39a8c",
+      // Default view keeps the clean page artwork, while gutter/page-edge depth stays visible.
+      showGutter: true, gutterWidth: 0.65, gutterOpacity: 0.29, gutterSoftness: 0.88,
+      showCover: true,
+      stackThickness: 0.42, paperRoughness: 0.86, layerOpacity: 0.28, restCurl: 0.05,
+      curlStrength: 0.4, cornerPeel: 0.5, pageSag: 0.09, flipDuration: 0.88,
+      keyIntensity: 3.2, ambient: 1.55, shadowOpacity: 0.04,
+      flipShadowStrength: 0.58, flipShadowSoftness: 0.74,
+    };
+    let config = { ...DEFAULTS };
+
+    const PAGE_W = 2.35, PAGE_H = 3.2, SEG_X = 64, SEG_Z = 72, PAPER_THICKNESS = 0.012;
+    const RES_X = 16, RES_Z = 20;
+
+    // Demo content: clear chapter + title; one solid-color page (#3).
+    let pages = [
+      { chapter: "CHAPTER ONE", title: "Beginnings", num: 1,
+        body: "Every book starts somewhere. Watch how the paper bends and settles as you turn the pages." },
+      { chapter: "CHAPTER ONE", title: "The Quiet Page", num: 2,
+        body: "Plain paper, dark ink. Neutral lighting keeps the shadows gray, like a real book under white light." },
+      { chapter: "COLOR TEST", title: "Solid Background", num: 3, bg: "#1f4fd6",
+        body: "A flat blue field, to show how the curl shading, rim sheen and gutter shadow read across saturated color or imagery." },
+      { chapter: "CHAPTER TWO", title: "Layers & Depth", num: 4,
+        body: "As a sheet lifts, the page beneath it darkens slightly — selling the sense of stacked, separate sheets." },
+      { chapter: "CHAPTER TWO", title: "Turning Pages", num: 5,
+        body: "Drag from either edge, tap an arrow, or use the keyboard. The turn settles with a soft cross-fade." },
+      { chapter: "APPENDIX", title: "PDF Ready", num: 6,
+        body: "Swap loadPageTexture() for a pdf.js page render and these placeholders become a real document." }
+    ];
+
+    let spreadIndex = 0, isAnimating = false, dragDirection = null, progress = 0;
+    let isDragging = false, pointerDown = false, dragStartX = 0, pendingDir = null;
+
+    const scene = new THREE.Scene(); scene.background = null;
+    const camera = new THREE.PerspectiveCamera(config.fov, window.innerWidth / window.innerHeight, 0.1, 100);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    app.appendChild(renderer.domElement);
+
+    const root = new THREE.Group(); scene.add(root);
+    const ambient = new THREE.AmbientLight(0xffffff, config.ambient); scene.add(ambient);
+
+    const keyLight = new THREE.DirectionalLight(0xffffff, config.keyIntensity);
+    keyLight.position.set(-2.6, 6.4, 3.4); keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(2048, 2048); keyLight.shadow.radius = 5;
+    keyLight.shadow.camera.near = 0.1; keyLight.shadow.camera.far = 14;
+    keyLight.shadow.camera.left = -5; keyLight.shadow.camera.right = 5;
+    keyLight.shadow.camera.top = 5; keyLight.shadow.camera.bottom = -5;
+    scene.add(keyLight);
+
+    const fillLight = new THREE.DirectionalLight(0xeef2f6, 0.9);
+    fillLight.position.set(3, 3.8, -4); scene.add(fillLight);
+
+    const tableMat = new THREE.ShadowMaterial({ color: 0x000000, opacity: config.shadowOpacity });
+    const table = new THREE.Mesh(new THREE.PlaneGeometry(9, 7), tableMat);
+    table.rotation.x = -Math.PI / 2; table.position.y = -0.42; table.receiveShadow = true; scene.add(table);
+
+    const bookGroup = new THREE.Group(); root.add(bookGroup);
+    let leftPageMesh, rightPageMesh, activePageMesh, activeGeometry, activeMaterial, underPageMesh;
+    let leftStack, rightStack, leftStackLines, rightStackLines, spineMesh, gutterShadow, coverBase, flipShadowMesh;
+    let pageTextures = [];
+
+    /* ============================================================
+       PDF INJECTION POINT — replace loadPageTexture(i) with a pdf.js
+       (or image) render that returns a THREE.CanvasTexture.
+    ============================================================ */
+    function loadPageTexture(index) { return createPlaceholderTexture(pages[index]); }
+    function regenerateTextures() {
+      pageTextures.forEach(t => t.dispose());
+      pageTextures = pages.map((_, i) => loadPageTexture(i));
+    }
+
+    function normalizePdfUrl(url) {
+      let value = (url || "").trim();
+      if (!value) return "";
+
+      // Google Drive share URL -> direct download URL.
+      const driveMatch = value.match(/drive\.google\.com\/file\/d\/([^/]+)/);
+      if (driveMatch && driveMatch[1]) {
+        value = "https://drive.google.com/uc?export=download&id=" + driveMatch[1];
+      }
+
+      return value;
+    }
+
+    function createBlankPdfTexture(pageNumber) {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1200; canvas.height = 1600;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "rgba(0,0,0,0.38)";
+      ctx.font = "700 30px Georgia, serif";
+      ctx.fillText("Blank page " + pageNumber, 88, 1500);
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      texture.needsUpdate = true;
+      return texture;
+    }
+
+    async function loadPdfFromUrl(rawUrl) {
+      if (!pdfjsLib) {
+        throw new Error("PDF.js did not load. Check the pdf.js CDN script.");
+      }
+      if (isAnimating) return;
+
+      const url = normalizePdfUrl(rawUrl);
+      if (!url) throw new Error("Enter a PDF URL first.");
+
+      setPdfStatus("Loading PDF...");
+      const button = document.getElementById("loadPdfBtn");
+      if (button) button.disabled = true;
+
+      try {
+        const loadingTask = pdfjsLib.getDocument({
+          url,
+          withCredentials: false,
+          disableAutoFetch: false,
+          disableStream: false
+        });
+
+        const pdf = await loadingTask.promise;
+        const nextTextures = [];
+        const nextPages = [];
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+          setPdfStatus("Rendering page " + i + " of " + pdf.numPages + "...");
+
+          const pdfPage = await pdf.getPage(i);
+
+          const targetW = 1200;
+          const targetH = 1600;
+          const baseViewport = pdfPage.getViewport({ scale: 1 });
+          const scale = Math.min(targetW / baseViewport.width, targetH / baseViewport.height);
+          const viewport = pdfPage.getViewport({ scale });
+
+          // Render the PDF page normally into a temporary canvas first.
+          const tempCanvas = document.createElement("canvas");
+          tempCanvas.width = Math.ceil(viewport.width);
+          tempCanvas.height = Math.ceil(viewport.height);
+
+          const tempCtx = tempCanvas.getContext("2d", { alpha: false });
+          tempCtx.fillStyle = "#ffffff";
+          tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+          await pdfPage.render({ canvasContext: tempCtx, viewport }).promise;
+
+          // Copy into the same 1200x1600 page canvas orientation used by
+          // createPlaceholderTexture(). This fixes the upside-down PDF issue.
+          const canvas = document.createElement("canvas");
+          canvas.width = targetW;
+          canvas.height = targetH;
+
+          const ctx = canvas.getContext("2d", { alpha: false });
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+          const x = (canvas.width - tempCanvas.width) / 2;
+          const y = (canvas.height - tempCanvas.height) / 2;
+
+          ctx.save();
+          ctx.translate(canvas.width / 2, canvas.height / 2);
+          ctx.scale(config.flipTextH ? -1 : 1, config.flipTextV ? -1 : 1);
+          ctx.translate(-canvas.width / 2, -canvas.height / 2);
+          ctx.drawImage(tempCanvas, x, y);
+          ctx.restore();
+
+          const texture = new THREE.CanvasTexture(canvas);
+          texture.colorSpace = THREE.SRGBColorSpace;
+          texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+          texture.needsUpdate = true;
+          nextTextures.push(texture);
+
+          nextPages.push({ chapter: "PDF", title: "Page " + i, num: i, body: "" });
+        }
+
+        // Keep spreads even: page turns use pairs, so an odd PDF needs one blank last page.
+        if (nextTextures.length % 2 === 1) {
+          const blankNum = nextTextures.length + 1;
+          nextTextures.push(createBlankPdfTexture(blankNum));
+          nextPages.push({ chapter: "PDF", title: "Blank", num: blankNum, body: "" });
+        }
+
+        pageTextures.forEach(t => t.dispose());
+        pageTextures = nextTextures;
+        pages = nextPages;
+        spreadIndex = 0;
+        cleanupActiveFlip();
+        buildBook();
+        setPdfStatus("Loaded " + pdf.numPages + " PDF page" + (pdf.numPages === 1 ? "" : "s") + ".");
+      } catch (err) {
+        console.error(err);
+        setPdfStatus("Could not load PDF. The URL must be a direct public PDF and must allow CORS.");
+        alert("PDF load failed. Most common reason: the PDF server blocks browser CORS. Try a direct PDF URL or serve it from your own domain.");
+      } finally {
+        if (button) button.disabled = false;
+      }
+    }
+
+    function setPdfStatus(message) {
+      const el = document.getElementById("pdfLoadStatus");
+      if (el) el.textContent = message;
+    }
+
+    function createPlaceholderTexture(page) {
+      const canvas = document.createElement("canvas"); canvas.width = 1200; canvas.height = 1600;
+      const ctx = canvas.getContext("2d");
+      ctx.save();
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.scale(config.flipTextH ? -1 : 1, config.flipTextV ? -1 : 1);
+      ctx.translate(-canvas.width / 2, -canvas.height / 2);
+
+      const hasBg = !!page.bg;
+      const text = hasBg ? "#ffffff" : "#1d1d1d";
+
+      if (hasBg) {
+        ctx.fillStyle = page.bg; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      } else {
+        const g = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+        g.addColorStop(0, "#ffffff"); g.addColorStop(0.58, "#ffffff"); g.addColorStop(1, "#fbfaf7");
+        ctx.fillStyle = g; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+
+      // soft corner highlight
+      const glow = ctx.createRadialGradient(180, 160, 10, 180, 160, 680);
+      glow.addColorStop(0, hasBg ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.12)");
+      glow.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = glow; ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+
+      // chapter eyebrow
+      ctx.globalAlpha = hasBg ? 0.85 : 0.5; ctx.fillStyle = text; ctx.font = "700 34px Georgia, serif";
+      ctx.fillText(page.chapter, 86, 150); ctx.globalAlpha = 1;
+
+      // title
+      ctx.font = "700 104px Georgia, serif"; ctx.fillStyle = text; wrapText(ctx, page.title, 86, 290, 920, 112);
+
+      // body
+      ctx.globalAlpha = hasBg ? 0.92 : 0.72; ctx.font = "400 42px 'Helvetica Neue', sans-serif"; ctx.fillStyle = text;
+      wrapText(ctx, page.body, 88, 600, 900, 62); ctx.globalAlpha = 1;
+
+      // two info cards
+      drawCard(ctx, 88, 940, 440, 200, text, hasBg, "Curved mesh", "The page bends as real geometry.");
+      drawCard(ctx, 570, 940, 440, 200, text, hasBg, "Visible stack", "The paper block has real depth.");
+
+      // footer
+      ctx.globalAlpha = 0.45; ctx.fillStyle = text; ctx.font = "700 28px Georgia, serif";
+      ctx.fillText("Page " + page.num, 88, 1500); ctx.globalAlpha = 1;
+      ctx.restore();
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace; texture.anisotropy = renderer.capabilities.getMaxAnisotropy(); texture.needsUpdate = true;
+      return texture;
+    }
+    function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+      const words = text.split(" "); let line = "", cy = y;
+      for (let i = 0; i < words.length; i++) { const test = line + words[i] + " ";
+        if (ctx.measureText(test).width > maxWidth && i > 0) { ctx.fillText(line, x, cy); line = words[i] + " "; cy += lineHeight; } else line = test; }
+      ctx.fillText(line, x, cy);
+    }
+    function drawCard(ctx, x, y, w, h, textColor, light, title, body) {
+      ctx.save(); roundRect(ctx, x, y, w, h, 42);
+      ctx.fillStyle = light ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.045)"; ctx.fill();
+      ctx.globalAlpha = light ? 0.4 : 0.14; ctx.strokeStyle = textColor; ctx.lineWidth = 2; ctx.stroke();
+      ctx.globalAlpha = 1; ctx.fillStyle = textColor; ctx.font = "700 34px Georgia, serif"; ctx.fillText(title, x + 34, y + 62);
+      ctx.globalAlpha = light ? 0.8 : 0.62; ctx.font = "400 27px 'Helvetica Neue', sans-serif"; wrapText(ctx, body, x + 34, y + 116, w - 72, 38); ctx.restore();
+    }
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+    }
+
+    /* ---------------- Meshes ---------------- */
+    function createRestingPage(side, texture, opacity = 1) {
+      const sign = side === "right" ? 1 : -1, c = config.restCurl;
+      const positions = [], uvs = [], indices = [];
+      for (let zi = 0; zi <= RES_Z; zi++) {
+        const vN = zi / RES_Z, pz = (vN - 0.5) * PAGE_H;
+        for (let xi = 0; xi <= RES_X; xi++) {
+          const uN = xi / RES_X, px = sign * uN * PAGE_W;
+          let y = 0.018;
+          y += c * Math.pow(uN, 1.6);
+          y += -0.55 * c * Math.exp(-uN * 7.0);
+          y += -0.6 * c * Math.pow(2 * (vN - 0.5), 2);
+          positions.push(px, y, pz); uvs.push(side === "right" ? uN : (1 - uN), vN);
+        }
+      }
+      for (let zi = 0; zi < RES_Z; zi++) for (let xi = 0; xi < RES_X; xi++) {
+        const a = zi*(RES_X+1)+xi, b = a+1, c2 = a+(RES_X+1), d = c2+1; indices.push(a,b,d, a,d,c2);
+      }
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+      geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+      geometry.setIndex(indices); geometry.computeVertexNormals();
+      // Use an unlit material for resting pages so there is no gray lighting overlay.
+      // The paper texture itself is the source of truth; flip shading is added only while the sheet turns.
+      const material = new THREE.MeshBasicMaterial({ map: texture, color: 0xffffff, side: THREE.DoubleSide, toneMapped: false, transparent: opacity < 1, opacity });
+      const mesh = new THREE.Mesh(geometry, material); mesh.castShadow = true; mesh.receiveShadow = true;
+      return mesh;
+    }
+
+    function createPageShaderMaterial(frontTexture, backTexture, direction) {
+      const flipDir = direction === "previous" ? -1.0 : 1.0;
+      const material = new THREE.ShaderMaterial({
+        uniforms: { frontMap: { value: frontTexture }, backMap: { value: backTexture },
+          lightDir: { value: new THREE.Vector3(-0.42, 0.9, 0.26).normalize() }, translucency: { value: 0.10 }, uOpacity: { value: 1.0 },
+          uProgress: { value: 0.0 }, uSettle: { value: 0.0 }, flipDir: { value: flipDir } },
+        vertexShader: `
+          varying vec2 vUv; varying vec3 vNormalWorld;
+          void main(){ vUv = uv; vec4 wp = modelMatrix * vec4(position,1.0);
+            vNormalWorld = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * viewMatrix * wp; }`,
+        fragmentShader: `
+          uniform sampler2D frontMap; uniform sampler2D backMap; uniform vec3 lightDir; uniform float translucency; uniform float uOpacity;
+          uniform float uProgress; uniform float uSettle; uniform float flipDir;
+          varying vec2 vUv; varying vec3 vNormalWorld;
+          void main(){
+            /*
+              Stable face mapping:
+              - Do NOT decide page content from gl_FrontFacing. The left-page flip
+                mirrors the mesh, so gl_FrontFacing can make the touched page appear
+                inverted or swap to the wrong page as soon as dragging starts.
+              - Instead, the sheet shows the touched page until halfway through the
+                turn, then shows the page printed on the back of that same sheet.
+              - UVs are direction-specific so a left page uses the same orientation
+                as the resting left page, and a right page uses the resting right orientation.
+            */
+            vec2 frontUv = flipDir > 0.0 ? vUv : vec2(1.0 - vUv.x, vUv.y);
+            vec2 backUv  = flipDir > 0.0 ? vec2(1.0 - vUv.x, vUv.y) : vUv;
+            vec4 frontColor = texture2D(frontMap, frontUv);
+            vec4 backColor  = texture2D(backMap, backUv);
+
+            /*
+              True two-sided sheet model:
+              The page has a front layer and a back layer. We do not fade the
+              front color away during the turn. The visible side is chosen from
+              the actual face orientation, corrected for the mirrored previous
+              direction. This keeps a blue page fully blue on its front side,
+              while its backside is the real next/previous page texture.
+            */
+            bool showFront = flipDir > 0.0 ? !gl_FrontFacing : gl_FrontFacing;
+            vec4 baseColor = showFront ? frontColor : backColor;
+
+            // Direction-aware paper depth. This gives both right-to-left and
+            // left-to-right turns the same soft edge/gradient behavior.
+            float hingeDist = flipDir > 0.0 ? vUv.x : (1.0 - vUv.x);
+            float outerDist = 1.0 - hingeDist;
+
+            vec3 n = normalize(vNormalWorld);
+            if (!gl_FrontFacing) n = -n;
+            float diffuse = clamp(dot(n, normalize(lightDir)), 0.0, 1.0);
+            float rim = pow(1.0 - abs(dot(n, vec3(0.0,1.0,0.0))), 2.2);
+
+            // At the exact moment you click/drag, the active sheet must match
+            // the resting page underneath: no sudden white/gray overlay.
+            // As the sheet lifts, gradually blend in the flip shading effects.
+            float lift = sin(uProgress * 3.14159265);
+            vec3 shaded = baseColor.rgb * (0.68 + diffuse * 0.42);
+            shaded += vec3(1.0) * rim * 0.13;
+            float backLum = dot(backColor.rgb, vec3(0.299, 0.587, 0.114));
+            shaded += vec3(backLum) * (translucency * smoothstep(0.35, 1.0, abs(n.y)));
+
+            float hingeShade = (1.0 - smoothstep(0.0, 0.24, hingeDist)) * 0.13;
+            float outerHighlight = (1.0 - smoothstep(0.0, 0.22, outerDist)) * 0.10;
+            shaded = shaded * (1.0 - hingeShade * lift) + vec3(1.0) * outerHighlight * lift;
+
+            float shadeMix = smoothstep(0.02, 0.55, lift) * (1.0 - uSettle);
+            vec3 lit = mix(baseColor.rgb, shaded, shadeMix);
+            gl_FragColor = vec4(lit, uOpacity);
+          }`,
+        side: THREE.DoubleSide,
+        // Opaque while flipping: the gutter/shadow can no longer show through
+        // the lifted sheet. We settle shader lighting instead of fading the
+        // page alpha during landing.
+        transparent: false,
+        depthTest: false,
+        depthWrite: false,
+        toneMapped: false
+      });
+      // Prevent transparent DoubleSide rendering from drawing front/back in
+      // two separate passes, which can create faint horizontal cut lines while flipping.
+      material.forceSinglePass = true;
+      return material;
+    }
+
+    function createActivePageGeometry() {
+      const positions = [], uvs = [], indices = [], mc = [];
+      for (let z = 0; z <= SEG_Z; z++) { const vN = z / SEG_Z, v = (vN - 0.5) * PAGE_H;
+        for (let x = 0; x <= SEG_X; x++) { const uN = x / SEG_X, u = uN * PAGE_W; positions.push(u, 0, v); uvs.push(uN, vN); mc.push(u, v, uN, vN); } }
+      for (let z = 0; z < SEG_Z; z++) for (let x = 0; x < SEG_X; x++) { const a = z*(SEG_X+1)+x, b = a+1, c = a+(SEG_X+1), d = c+1; indices.push(a,b,d, a,d,c); }
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+      geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+      geometry.setIndex(indices); geometry.userData.materialCoords = mc; geometry.computeVertexNormals();
+      return geometry;
+    }
+
+    function createStackMesh(side) {
+      const sign = side === "right" ? 1 : -1, t = config.stackThickness;
+      const material = new THREE.MeshStandardMaterial({ color: side==="right"?0xf3ead9:0xe8ddcb, roughness: 0.92, metalness: 0 });
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(PAGE_W, t, PAGE_H), material);
+      mesh.position.set(sign*PAGE_W/2, -t/2 - 0.035, 0); mesh.castShadow = true; mesh.receiveShadow = true; return mesh;
+    }
+    function createPaperLayerLines(side) {
+      const sign = side === "right" ? 1 : -1, group = new THREE.Group(), t = config.stackThickness;
+      const lineMat = new THREE.LineBasicMaterial({ color: 0x9a8f7d, transparent: true, opacity: config.layerOpacity });
+      for (let i = 0; i < 18; i++) { const y = -0.035 - (i / 18) * t;
+        const pts = [ new THREE.Vector3(sign*0.06,y,-PAGE_H/2), new THREE.Vector3(sign*PAGE_W,y,-PAGE_H/2), new THREE.Vector3(sign*PAGE_W,y,PAGE_H/2), new THREE.Vector3(sign*0.06,y,PAGE_H/2) ];
+        group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMat)); }
+      return group;
+    }
+    function createCoverBase() {
+      const t = config.stackThickness;
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(PAGE_W*2 + 0.18, 0.07, PAGE_H + 0.18),
+        new THREE.MeshStandardMaterial({ color: 0x2a2f3a, roughness: 0.7, metalness: 0.05 }));
+      mesh.position.set(0, -t - 0.095, 0); mesh.castShadow = true; mesh.receiveShadow = true; return mesh;
+    }
+    function createSpine() {
+      const r = config.spineRadius;
+      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, PAGE_H, 48),
+        new THREE.MeshStandardMaterial({ color: new THREE.Color(config.spineColor), roughness: 0.8, metalness: 0.03 }));
+      mesh.rotation.x = Math.PI/2;
+      mesh.position.set(0, 0.014, 0);
+      mesh.renderOrder = 39;
+      mesh.castShadow = true; mesh.receiveShadow = true; return mesh;
+    }
+    function createGutterTexture() {
+      // Horizontal seam fade + vertical mask so the gutter never bleeds past
+      // the top/bottom page edges as little triangles/cuts.
+      const c = document.createElement("canvas"); c.width = 256; c.height = 128;
+      const ctx = c.getContext("2d");
+      const img = ctx.createImageData(c.width, c.height);
+      const exp = 1 + (1 - config.gutterSoftness) * 7;
+      for (let y = 0; y < c.height; y++) {
+        const yn = y / (c.height - 1);
+        const edgeFade = Math.min(1, Math.min(yn, 1 - yn) / 0.055);
+        const vMask = edgeFade * edgeFade * (3 - 2 * edgeFade);
+        for (let x = 0; x < c.width; x++) {
+          const d = Math.abs(x / (c.width - 1) - 0.5) * 2;
+          const h = Math.max(0, Math.min(1, Math.pow(Math.max(0, 1 - d), exp)));
+          const a = h * vMask;
+          const k = (y * c.width + x) * 4;
+          img.data[k + 3] = Math.round(a * 255);
+        }
+      }
+      ctx.putImageData(img, 0, 0);
+      const tex = new THREE.CanvasTexture(c); tex.needsUpdate = true; return tex;
+    }
+    function createGutterShadow() {
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(config.gutterWidth, PAGE_H - 0.035),
+        new THREE.MeshBasicMaterial({ map: createGutterTexture(), transparent: true, opacity: config.gutterOpacity, depthTest: false, depthWrite: false, toneMapped: false }));
+      // Render as a persistent seam overlay. During the landing blend the
+      // active sheet and the temporary resting clone both render above the
+      // book, so the gutter must render above those too; otherwise it appears
+      // to vanish for a split second and then pop back after cleanup.
+      mesh.rotation.x = -Math.PI/2;
+      mesh.position.set(0, 0.052, 0);
+      mesh.renderOrder = 40;
+      mesh.frustumCulled = false;
+      return mesh;
+    }
+
+    function createFlipShadowTexture() {
+      const c = document.createElement("canvas"); c.width = 768; c.height = 768;
+      const ctx = c.getContext("2d");
+      const softness = THREE.MathUtils.clamp(config.flipShadowSoftness, 0, 1);
+      const core = 18 + softness * 70;
+      const mid = 0.22 + softness * 0.20;
+      const falloff = 0.58 + softness * 0.32;
+      const g = ctx.createRadialGradient(384, 384, core, 384, 384, 382);
+      g.addColorStop(0.00, "rgba(0,0,0,0.78)");
+      g.addColorStop(mid, "rgba(0,0,0,0.36)");
+      g.addColorStop(falloff, "rgba(0,0,0,0.12)");
+      g.addColorStop(1.00, "rgba(0,0,0,0)");
+      ctx.fillStyle = g; ctx.fillRect(0, 0, 768, 768);
+      const tex = new THREE.CanvasTexture(c); tex.needsUpdate = true; return tex;
+    }
+    function createFlipShadow() {
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(PAGE_W * 2.38, PAGE_H * 1.26),
+        new THREE.MeshBasicMaterial({ map: createFlipShadowTexture(), transparent: true, opacity: 0, depthTest: false, depthWrite: false, toneMapped: false }));
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.set(0, 0.029, 0);
+      mesh.renderOrder = 6.5;
+      mesh.visible = false;
+      return mesh;
+    }
+
+    function buildBook() {
+      bookGroup.clear(); underPageMesh = null;
+      coverBase = createCoverBase();
+      leftStack = createStackMesh("left"); rightStack = createStackMesh("right");
+      leftStackLines = createPaperLayerLines("left"); rightStackLines = createPaperLayerLines("right");
+      spineMesh = createSpine(); gutterShadow = createGutterShadow();
+      leftPageMesh = createRestingPage("left", pageTextures[spreadIndex]);
+      rightPageMesh = createRestingPage("right", pageTextures[spreadIndex + 1]);
+      if (config.showCover) bookGroup.add(coverBase);
+      bookGroup.add(leftStack, rightStack, leftStackLines, rightStackLines, leftPageMesh, rightPageMesh);
+      if (config.showGutter) bookGroup.add(gutterShadow);
+      if (config.showSpine) bookGroup.add(spineMesh);
+      keepGutterVisible();
+      updateStatus();
+    }
+    function updateStatus() {
+      statusText.textContent = "Pages " + (spreadIndex + 1) + "\u2013" + Math.min(spreadIndex + 2, pages.length);
+      prevBtn.disabled = spreadIndex === 0; nextBtn.disabled = spreadIndex >= pages.length - 2;
+    }
+
+    function keepGutterVisible() {
+      if (gutterShadow) {
+        gutterShadow.renderOrder = 40;
+        gutterShadow.position.y = 0.052;
+        gutterShadow.material.depthTest = false;
+        gutterShadow.material.depthWrite = false;
+        gutterShadow.material.opacity = config.gutterOpacity;
+        // Re-add as the last child so it stays visually persistent even during
+        // the landing blend where temporary page layers sit above the spread.
+        if (gutterShadow.parent) gutterShadow.parent.remove(gutterShadow);
+        bookGroup.add(gutterShadow);
+      }
+      if (spineMesh) {
+        spineMesh.renderOrder = 39;
+        if (spineMesh.parent) {
+          spineMesh.parent.remove(spineMesh);
+          bookGroup.add(spineMesh);
+        }
+      }
+    }
+
+    /* ---------------- Flip logic ---------------- */
+    function prepareFlip(direction) {
+      if (isAnimating) return false;
+      if (direction === "next" && spreadIndex >= pages.length - 2) return false;
+      if (direction === "previous" && spreadIndex === 0) return false;
+
+      dragDirection = direction; progress = 0;
+      const frontIndex = direction === "next" ? spreadIndex + 1 : spreadIndex;
+      const backIndex  = direction === "next" ? spreadIndex + 2 : spreadIndex - 1;
+
+      const underIndex = direction === "next" ? spreadIndex + 3 : spreadIndex - 2;
+      const underSide  = direction === "next" ? "right" : "left";
+      if (underIndex >= 0 && underIndex < pages.length) {
+        underPageMesh = createRestingPage(underSide, pageTextures[underIndex]);
+        underPageMesh.position.y = -0.0015; underPageMesh.castShadow = false;
+        bookGroup.add(underPageMesh);
+      }
+
+      flipShadowMesh = createFlipShadow();
+      bookGroup.add(flipShadowMesh);
+
+      activeGeometry = createActivePageGeometry();
+      activeMaterial = createPageShaderMaterial(pageTextures[frontIndex], pageTextures[backIndex], direction);
+      activeMaterial.polygonOffset = true; activeMaterial.polygonOffsetFactor = -2; activeMaterial.polygonOffsetUnits = -2;
+      activePageMesh = new THREE.Mesh(activeGeometry, activeMaterial);
+      // Draw the active sheet after the gutter overlay so the page remains a
+      // solid printed sheet and the center gradient cannot show through it.
+      activePageMesh.renderOrder = 41; activePageMesh.castShadow = false; activePageMesh.receiveShadow = true;
+      bookGroup.add(activePageMesh);
+
+      if (direction === "next") rightPageMesh.visible = false; else leftPageMesh.visible = false;
+      deformActivePage(0);
+      return true;
+    }
+
+    function deformActivePage(p) {
+      if (!activeGeometry || !dragDirection) return;
+      progress = THREE.MathUtils.clamp(p, 0, 1);
+      if (activeMaterial && activeMaterial.uniforms.uProgress) activeMaterial.uniforms.uProgress.value = progress;
+      const position = activeGeometry.attributes.position;
+      const coords = activeGeometry.userData.materialCoords;
+      const startSign = dragDirection === "next" ? 1 : -1;
+
+      const fold = Math.PI * progress;
+      const lift = Math.sin(Math.PI * progress);
+      const cornerPeel = config.cornerPeel * lift;
+      const curlStrength = config.curlStrength * lift;
+      const sagStrength = config.pageSag, gutterDepth = 0.04, t = config.stackThickness;
+      const baseY = 0.018 + 0.008 * lift; // matches resting height at both ends -> no drop at landing
+
+      for (let i = 0; i < position.count; i++) {
+        const u = coords[i*4], v = coords[i*4+1], uN = coords[i*4+2], vN = coords[i*4+3];
+        // Keep the center hinge straight; apply corner peel toward the free outer edge.
+        // This removes small triangle/cut artifacts at the top/bottom gutter edge.
+        const diagonalTwist = (vN - 0.5) * cornerPeel * Math.pow(uN, 1.35) * 0.85;
+        const curlProfile = Math.sin(uN*Math.PI)*curlStrength + (1.0 - uN)*curlStrength*0.2;
+        const localAngle = fold + curlProfile*0.86 + diagonalTwist;
+
+        let x = startSign * u * Math.cos(localAngle);
+        let y = u * Math.sin(localAngle) * 0.82;
+        let z = v;
+        y += Math.pow(uN,1.85) * Math.pow(vN,2.25) * lift * 0.36;
+        z += Math.pow(uN,1.45) * (vN - 0.5) * lift * 0.12;
+        y += -sagStrength * Math.pow(uN,2.2) * (1.0 - lift*0.65);
+        y += -gutterDepth * Math.exp(-uN*15.0) * (1.0 - lift*0.35);
+        y += Math.sin((uN*5.0 + progress*2.2)*Math.PI) * Math.sin(progress*Math.PI) * 0.006;
+        y += PAPER_THICKNESS * Math.sin(uN*Math.PI) * Math.sin(progress*Math.PI);
+        position.setXYZ(i, x, y + baseY, z);
+      }
+      position.needsUpdate = true; activeGeometry.computeVertexNormals();
+
+      activePageMesh.castShadow = lift > 0.18;
+      if (flipShadowMesh) {
+        // Controlled fake cast shadow: works on both flip directions and does
+        // not dirty the true-color resting page material.
+        const fold = Math.PI * progress;
+        const travel = Math.cos(fold);
+        const centerX = startSign * PAGE_W * 0.22 * travel;
+        const scaleX = 1.02 + lift * 0.82;
+        const scaleZ = 0.96 + lift * 0.32;
+        flipShadowMesh.visible = lift > 0.018;
+        flipShadowMesh.position.x = centerX;
+        flipShadowMesh.position.y = 0.031;
+        flipShadowMesh.scale.set(scaleX, scaleZ, 1);
+        const travelBoost = 0.78 + 0.34 * (1.0 - Math.abs(travel));
+        flipShadowMesh.material.opacity = config.flipShadowStrength * Math.pow(lift, 0.62) * travelBoost;
+      }
+      if (underPageMesh) {
+        const dark = 0.12 * (1 - THREE.MathUtils.smoothstep(progress, 0.8, 1.0));
+        underPageMesh.material.color.setScalar(1 - dark);
+      }
+      if (dragDirection === "next") {
+        leftStack.position.y  = -t/2 - 0.035 + progress*0.018;
+        rightStack.position.y = -t/2 - 0.035 - progress*0.006;
+      } else {
+        leftStack.position.y  = -t/2 - 0.035 - progress*0.006;
+        rightStack.position.y = -t/2 - 0.035 + progress*0.018;
+      }
+      if (spineMesh) spineMesh.rotation.z = (dragDirection === "next" ? -1 : 1) * lift * 0.016;
+      if (gutterShadow) gutterShadow.material.opacity = config.gutterOpacity + lift * 0.08;
+      root.rotation.z = (dragDirection === "next" ? -1 : 1) * lift * 0.01;
+    }
+
+    function disposeMesh(mesh) {
+      if (!mesh) return;
+      if (mesh.parent) mesh.parent.remove(mesh);
+      if (mesh.geometry) mesh.geometry.dispose();
+      if (mesh.material) {
+        if (Array.isArray(mesh.material)) mesh.material.forEach(m => m && m.dispose && m.dispose());
+        else mesh.material.dispose();
+      }
+    }
+
+    function resetFlipState() {
+      underPageMesh = null;
+      flipShadowMesh = null;
+      activePageMesh = null;
+      activeGeometry = null;
+      activeMaterial = null;
+      isAnimating = false;
+      isDragging = false;
+      pointerDown = false;
+      dragDirection = null;
+      progress = 0;
+      root.rotation.z = 0;
+      if (gutterShadow) gutterShadow.material.opacity = config.gutterOpacity;
+    }
+
+    function cleanupActiveFlip() {
+      disposeMesh(underPageMesh);
+      disposeMesh(flipShadowMesh);
+      disposeMesh(activePageMesh);
+      resetFlipState();
+    }
+
+    function disposeTextureMap(mat) {
+      // Do not dispose pageTextures; they are reused by the book.
+      if (mat && mat.map && !pageTextures.includes(mat.map)) mat.map.dispose();
+    }
+
+    function disposeMeshKeepingSharedTextures(mesh) {
+      if (!mesh) return;
+      if (mesh.parent) mesh.parent.remove(mesh);
+      if (mesh.geometry) mesh.geometry.dispose();
+      if (mesh.material) {
+        if (Array.isArray(mesh.material)) {
+          mesh.material.forEach(m => { disposeTextureMap(m); m && m.dispose && m.dispose(); });
+        } else {
+          disposeTextureMap(mesh.material);
+          mesh.material.dispose();
+        }
+      }
+    }
+
+    function createLandingMatchMesh(dir) {
+      // Create a temporary page that uses the exact same texture + resting-page
+      // material as the final spread. We crossfade into this clone first, then
+      // remove it after it visually becomes indistinguishable from the real page.
+      const side = dir === "next" ? "left" : "right";
+      const textureIndex = dir === "next" ? spreadIndex : spreadIndex + 1;
+      const mesh = createRestingPage(side, pageTextures[textureIndex], 0);
+      mesh.renderOrder = 13;
+      mesh.material.transparent = true;
+      mesh.material.depthTest = false;
+      mesh.material.depthWrite = false;
+      mesh.material.opacity = 0;
+      return mesh;
+    }
+
+    // Landing blend:
+    // The v12/v17 flicker fix came from never letting the active sheet z-fight
+    // with the resting page. For a nicer finish, we still commit/rebuild first,
+    // but we keep the nearly-landed active sheet above the new spread for a very
+    // longer opacity fade. Because the active material has depthTest/depthWrite off
+    // and stops at 0.985 progress, it blends visually without coplanar flicker.
+    function finishFlip(commit, dir) {
+      if (!activePageMesh) {
+        if (commit) {
+          if (dir === "next") spreadIndex += 2;
+          else if (dir === "previous") spreadIndex -= 2;
+        }
+        buildBook();
+        resetFlipState();
+        return;
+      }
+
+      const sheet = activePageMesh;
+      const geo = activeGeometry;
+      const mat = activeMaterial;
+      const shadow = flipShadowMesh;
+      const under = underPageMesh;
+
+      // Remove the temporary under page before the resting spread rebuilds.
+      // Keep the shadow briefly so the landing does not suddenly lose depth.
+      disposeMeshKeepingSharedTextures(under);
+      underPageMesh = null;
+
+      if (commit) {
+        if (dir === "next") spreadIndex += 2;
+        else if (dir === "previous") spreadIndex -= 2;
+      }
+
+      // Rebuild the clean final spread underneath.
+      if (sheet.parent) sheet.parent.remove(sheet);
+      buildBook();
+
+      // Put the old turning sheet back above the new spread, then crossfade it
+      // into an exact resting-page clone. The clone uses the same material, UVs,
+      // texture, and geometry as the final spread, so the last removal is invisible.
+      const landingMesh = commit ? createLandingMatchMesh(dir) : null;
+      if (landingMesh) bookGroup.add(landingMesh);
+      keepGutterVisible();
+      // Keep the sheet opaque during the finish. The old opacity fade made the
+      // gutter/under-page visible through the paper. Instead, we fade only the
+      // shader lighting down to the flat resting-page look, then remove the
+      // sheet once it visually matches the page below.
+      sheet.renderOrder = 41;
+      if (mat) {
+        mat.transparent = false;
+        mat.depthTest = false;
+        mat.depthWrite = false;
+        mat.uniforms.uOpacity.value = 1.0;
+        if (mat.uniforms.uSettle) mat.uniforms.uSettle.value = 0.0;
+      }
+      bookGroup.add(sheet);
+      keepGutterVisible();
+
+      gsapInstance.to(root.rotation, { z: 0, duration: commit ? 0.56 : 0.22, ease: "sine.inOut" });
+      if (mat.uniforms.uSettle) {
+        gsapInstance.to(mat.uniforms.uSettle, {
+          value: 1,
+          duration: commit ? 0.74 : 0.18,
+          ease: "sine.inOut"
+        });
+      }
+      if (landingMesh) {
+        gsapInstance.to(landingMesh.material, {
+          opacity: 1,
+          duration: 0.28,
+          ease: "sine.inOut"
+        });
+      }
+      if (shadow) {
+        gsapInstance.to(shadow.material, {
+          opacity: 0,
+          duration: commit ? 0.72 : 0.18,
+          ease: "sine.out"
+        });
+      }
+      const cleanupDelay = commit ? 0.78 : 0.24;
+      gsapInstance.delayedCall(cleanupDelay, () => {
+        // No alpha dissolve here: by this point uSettle has made the active
+        // sheet match the resting clone/page below, so removal is visually
+        // clean without making the paper transparent.
+        if (sheet.parent) sheet.parent.remove(sheet);
+        if (landingMesh && landingMesh.parent) landingMesh.parent.remove(landingMesh);
+        if (shadow) disposeMeshKeepingSharedTextures(shadow);
+        if (geo) geo.dispose();
+        if (mat) mat.dispose();
+        if (landingMesh) {
+          landingMesh.geometry.dispose();
+          landingMesh.material.dispose();
+        }
+        flipShadowMesh = null;
+        resetFlipState();
+      });
+    }
+
+    function completeFlip() {
+      if (isAnimating || !activePageMesh) return;
+      isAnimating = true; isDragging = false;
+      const dir = dragDirection;
+      gsapInstance.killTweensOf(activeMaterial?.uniforms?.uProgress || {});
+      gsapInstance.to({ value: progress }, {
+        value: 1.0,
+        duration: config.flipDuration * Math.max(0.4, 1 - progress * 0.4),
+        ease: "power3.inOut",
+        onUpdate: function () { deformActivePage(this.targets()[0].value); },
+        onComplete: () => finishFlip(true, dir)
+      });
+    }
+    function cancelFlip() {
+      if (isAnimating || !activePageMesh) return;
+      isAnimating = true; isDragging = false;
+      gsapInstance.to({ value: progress }, {
+        value: 0.015,
+        duration: 0.34,
+        ease: "power3.out",
+        onUpdate: function () { deformActivePage(this.targets()[0].value); },
+        onComplete: () => finishFlip(false, null)
+      });
+    }
+
+    function goNext() { if (isAnimating || spreadIndex >= pages.length - 2) return; if (prepareFlip("next")) completeFlip(); }
+    function goPrevious() { if (isAnimating || spreadIndex === 0) return; if (prepareFlip("previous")) completeFlip(); }
+
+    /* ---------------- Drag-to-flip ---------------- */
+    function getClientX(e) {
+      if (e.touches && e.touches.length) return e.touches[0].clientX;
+      if (e.changedTouches && e.changedTouches.length) return e.changedTouches[0].clientX;
+      return e.clientX;
+    }
+    function startDrag(e) {
+      if (isAnimating || isDragging) return;
+      const x = getClientX(e);
+      pointerDown = true; dragStartX = x; pendingDir = x > window.innerWidth / 2 ? "next" : "previous";
+    }
+    function moveDrag(e) {
+      if (isAnimating) return;
+      const x = getClientX(e);
+      if (pointerDown && !isDragging) {
+        if (Math.abs(x - dragStartX) < 6) return;       // ignore tiny clicks
+        if (!prepareFlip(pendingDir)) { pointerDown = false; return; }
+        isDragging = true;
+      }
+      if (!isDragging || !dragDirection) return;
+      const dx = x - dragStartX, half = window.innerWidth * 0.42;
+      const raw = dragDirection === "next" ? -dx / half : dx / half;
+      deformActivePage(Math.pow(THREE.MathUtils.clamp(raw, 0, 1), 0.85));
+      e.preventDefault();
+    }
+    function endDrag() {
+      pointerDown = false;
+      if (!isDragging || isAnimating || !dragDirection) return;
+      if (progress > 0.4) completeFlip(); else cancelFlip();
+    }
+
+    function resize() { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
+    function animate() { requestAnimationFrame(animate); renderer.render(scene, camera); }
+    function applyCamera() { camera.position.set(0, config.camHeight, config.camTilt); camera.lookAt(0,0,0); camera.fov = config.fov; camera.updateProjectionMatrix(); renderer.toneMappingExposure = config.exposure; }
+    function applyLights() { keyLight.intensity = config.keyIntensity; ambient.intensity = config.ambient; tableMat.opacity = config.shadowOpacity; }
+
+    /* ====== Control deck ====== */
+    const SCHEMA = [
+      { group: "Orientation (fix upside-down)" },
+      { key: "flipTextH", type: "toggle", name: "Flip text horizontal", effect: "texture" },
+      { key: "flipTextV", type: "toggle", name: "Flip text vertical", effect: "texture" },
+      { group: "Camera" },
+      { key: "camHeight", type: "range", name: "Height", min: 3, max: 12, step: 0.05, effect: "camera" },
+      { key: "camTilt", type: "range", name: "Tilt (toward viewer)", min: 0, max: 4, step: 0.05, effect: "camera" },
+      { key: "fov", type: "range", name: "Field of view", min: 12, max: 60, step: 1, effect: "camera" },
+      { key: "exposure", type: "range", name: "Exposure", min: 0.4, max: 2, step: 0.02, effect: "camera" },
+      { group: "Spine & Gutter (the seam)" },
+      { key: "showSpine", type: "toggle", name: "Show spine", effect: "rebuild" },
+      { key: "spineColor", type: "color", name: "Spine color", effect: "spinecolor" },
+      { key: "spineRadius", type: "range", name: "Spine thickness", min: 0.004, max: 0.12, step: 0.002, effect: "rebuild" },
+      { key: "showGutter", type: "toggle", name: "Show gutter shadow", effect: "rebuild" },
+      { key: "gutterWidth", type: "range", name: "Gutter width", min: 0.02, max: 0.7, step: 0.01, effect: "rebuild" },
+      { key: "gutterOpacity", type: "range", name: "Gutter darkness", min: 0, max: 0.5, step: 0.01, effect: "rebuild" },
+      { key: "gutterSoftness", type: "range", name: "Gutter softness (blur)", min: 0, max: 1, step: 0.02, effect: "rebuild" },
+      { key: "showCover", type: "toggle", name: "Show cover edge", effect: "rebuild" },
+      { group: "Paper & Stack" },
+      { key: "stackThickness", type: "range", name: "Stack thickness", min: 0.04, max: 0.6, step: 0.01, effect: "rebuild" },
+      { key: "paperRoughness", type: "range", name: "Paper roughness", min: 0.2, max: 1, step: 0.02, effect: "rebuild" },
+      { key: "layerOpacity", type: "range", name: "Page-edge lines", min: 0, max: 0.7, step: 0.02, effect: "rebuild" },
+      { key: "restCurl", type: "range", name: "Page curve", min: 0, max: 0.15, step: 0.005, effect: "rebuild" },
+      { group: "Curl & Flip physics" },
+      { key: "curlStrength", type: "range", name: "Curl strength", min: 0, max: 1.6, step: 0.02, effect: "none" },
+      { key: "cornerPeel", type: "range", name: "Corner peel", min: 0, max: 1.2, step: 0.02, effect: "none" },
+      { key: "pageSag", type: "range", name: "Page sag", min: 0, max: 0.12, step: 0.002, effect: "none" },
+      { key: "flipDuration", type: "range", name: "Flip duration (s)", min: 0.3, max: 1.6, step: 0.02, effect: "none" },
+      { group: "Flip shadow" },
+      { key: "flipShadowStrength", type: "range", name: "Lift shadow strength", min: 0, max: 1.25, step: 0.01, effect: "none" },
+      { key: "flipShadowSoftness", type: "range", name: "Lift shadow blur", min: 0, max: 1, step: 0.02, effect: "shadowtexture" },
+      { group: "Lighting" },
+      { key: "keyIntensity", type: "range", name: "Key light", min: 0, max: 6, step: 0.05, effect: "light" },
+      { key: "ambient", type: "range", name: "Ambient", min: 0, max: 3, step: 0.05, effect: "light" },
+      { key: "shadowOpacity", type: "range", name: "Shadow strength", min: 0, max: 0.6, step: 0.01, effect: "light" },
+    ];
+    const PRESETS = {
+      "Studio":   { keyIntensity: 3.2, ambient: 1.55, exposure: 1.0, camHeight: 6.85, camTilt: 1.05, fov: 30, shadowOpacity: 0.04, gutterOpacity: 0.29, layerOpacity: 0.28, flipShadowStrength: 0.58, flipShadowSoftness: 0.74 },
+      "Soft":     { keyIntensity: 1.9, ambient: 2.2, exposure: 1.15, camHeight: 7.6, camTilt: 0.7, fov: 26, shadowOpacity: 0.16 },
+      "Dramatic": { keyIntensity: 4.6, ambient: 0.7, exposure: 0.92, camHeight: 6.0, camTilt: 1.7, fov: 34, shadowOpacity: 0.42 },
+      "Macro":    { camHeight: 4.4, camTilt: 2.2, fov: 42, exposure: 1.05 },
+    };
+
+    const controlsEl = document.getElementById("controls");
+    const jsonBox = document.getElementById("jsonBox");
+    const refs = {};
+    function dispatchEffect(effect) {
+      if (effect === "camera") applyCamera();
+      else if (effect === "light") applyLights();
+      else if (effect === "rebuild") buildBook();
+      else if (effect === "texture") { regenerateTextures(); buildBook(); }
+      else if (effect === "spinecolor") { if (spineMesh) spineMesh.material.color.set(config.spineColor); }
+      else if (effect === "shadowtexture") { if (flipShadowMesh) { flipShadowMesh.material.map.dispose(); flipShadowMesh.material.map = createFlipShadowTexture(); flipShadowMesh.material.needsUpdate = true; } }
+      syncJson();
+    }
+    function buildUI() {
+      controlsEl.innerHTML = ""; let groupEl = null;
+      SCHEMA.forEach(item => {
+        if (item.group) { groupEl = document.createElement("div"); groupEl.className = "group";
+          const lab = document.createElement("div"); lab.className = "glabel"; lab.textContent = item.group; groupEl.appendChild(lab); controlsEl.appendChild(groupEl); return; }
+        if (item.type === "range") {
+          const row = document.createElement("div"); row.className = "row";
+          const top = document.createElement("div"); top.className = "top";
+          const name = document.createElement("span"); name.className = "name"; name.textContent = item.name;
+          const val = document.createElement("span"); val.className = "val"; val.textContent = fmt(config[item.key]);
+          top.append(name, val);
+          const input = document.createElement("input"); input.type = "range"; input.min = item.min; input.max = item.max; input.step = item.step; input.value = config[item.key];
+          input.addEventListener("input", () => { config[item.key] = parseFloat(input.value); val.textContent = fmt(config[item.key]); dispatchEffect(item.effect); });
+          row.append(top, input); groupEl.appendChild(row); refs[item.key] = { input, val };
+        } else if (item.type === "color") {
+          const row = document.createElement("div"); row.className = "toggle";
+          const name = document.createElement("span"); name.className = "name"; name.textContent = item.name;
+          const input = document.createElement("input"); input.type = "color"; input.value = config[item.key];
+          input.addEventListener("input", () => { config[item.key] = input.value; dispatchEffect(item.effect); });
+          row.append(name, input); groupEl.appendChild(row); refs[item.key] = { input };
+        } else {
+          const row = document.createElement("div"); row.className = "toggle";
+          const name = document.createElement("span"); name.className = "name"; name.textContent = item.name;
+          const sw = document.createElement("div"); sw.className = "sw" + (config[item.key] ? " on" : "");
+          sw.addEventListener("click", () => { config[item.key] = !config[item.key]; sw.classList.toggle("on", config[item.key]); dispatchEffect(item.effect); });
+          row.append(name, sw); groupEl.appendChild(row); refs[item.key] = { sw };
+        }
+      });
+    }
+    function refreshUI() {
+      SCHEMA.forEach(item => {
+        if (item.group || !refs[item.key]) return;
+        if (item.type === "range") { refs[item.key].input.value = config[item.key]; refs[item.key].val.textContent = fmt(config[item.key]); }
+        else if (item.type === "color") { refs[item.key].input.value = config[item.key]; }
+        else refs[item.key].sw.classList.toggle("on", config[item.key]);
+      });
+    }
+    function fmt(v) { return Number.isInteger(v) ? v : Number(v).toFixed(3).replace(/0+$/,"").replace(/\.$/,""); }
+    function syncJson() { jsonBox.value = JSON.stringify(config, null, 2); }
+
+    const presetChips = document.getElementById("presetChips");
+    Object.keys(PRESETS).forEach(name => {
+      const c = document.createElement("div"); c.className = "chip"; c.textContent = name;
+      c.addEventListener("click", () => { Object.assign(config, PRESETS[name]); refreshUI(); applyCamera(); applyLights(); buildBook(); syncJson(); });
+      presetChips.appendChild(c);
+    });
+    document.getElementById("copyBtn").addEventListener("click", () => {
+      syncJson(); const btn = document.getElementById("copyBtn");
+      const done = () => { btn.textContent = "Copied \u2713"; setTimeout(() => btn.textContent = "Copy config", 1200); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(jsonBox.value).then(done).catch(() => { jsonBox.select(); done(); });
+      else { jsonBox.select(); try { document.execCommand("copy"); } catch(e){} done(); }
+    });
+    document.getElementById("resetBtn").addEventListener("click", () => { config = { ...DEFAULTS }; refreshUI(); applyCamera(); applyLights(); regenerateTextures(); buildBook(); syncJson(); });
+    const deck = document.getElementById("deck");
+    document.getElementById("deckHead").addEventListener("click", () => { deck.classList.toggle("collapsed"); document.getElementById("chev").textContent = deck.classList.contains("collapsed") ? "\u25B8" : "\u25BE"; });
+
+    window.addEventListener("resize", resize);
+    renderer.domElement.addEventListener("pointerdown", startDrag);
+    window.addEventListener("pointermove", moveDrag);
+    window.addEventListener("pointerup", endDrag);
+    renderer.domElement.addEventListener("touchstart", startDrag, { passive: false });
+    window.addEventListener("touchmove", moveDrag, { passive: false });
+    window.addEventListener("touchend", endDrag);
+    nextBtn.addEventListener("click", goNext);
+    prevBtn.addEventListener("click", goPrevious);
+    document.addEventListener("keydown", (e) => { if (e.key === "ArrowRight") goNext(); if (e.key === "ArrowLeft") goPrevious(); });
+
+    document.getElementById("loadPdfBtn").addEventListener("click", () => {
+      loadPdfFromUrl(document.getElementById("pdfUrlInput").value);
+    });
+    document.getElementById("pdfUrlInput").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") loadPdfFromUrl(e.currentTarget.value);
+    });
+
+    const initialPdfUrl = new URLSearchParams(window.location.search).get("pdf");
+    if (initialPdfUrl) document.getElementById("pdfUrlInput").value = initialPdfUrl;
+
+    buildUI(); syncJson(); applyCamera(); applyLights(); regenerateTextures(); buildBook(); animate();
+
+    if (initialPdfUrl) {
+      setTimeout(() => loadPdfFromUrl(initialPdfUrl), 150);
+    }
+  </script>
+</body>
+</html>
