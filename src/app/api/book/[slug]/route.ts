@@ -125,7 +125,10 @@ function buildEngineHtml(slug: string, debug: boolean): string {
 
     function drawTextPage(ctx, canvas, page, bgImage) {
       const hasPhoto = !!(page.backgroundAssetId && bgImage);
-      ctx.fillStyle = '#ffffff';
+      const hasColor = !hasPhoto && typeof page.background === 'string' && /^#([0-9a-fA-F]{6})$/.test(page.background);
+      // Paint the page base: a solid color page must actually fill that color,
+      // otherwise white-on-white text renders invisibly (blank page bug).
+      ctx.fillStyle = hasColor ? page.background : '#ffffff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       if (hasPhoto) {
@@ -389,6 +392,19 @@ function buildEngineHtml(slug: string, debug: boolean): string {
   );
 
   html = html.replace("<div class=\"pdf-loader\">", "<div class=\"pdf-loader\" style=\"display:none\">\n");
+
+  // Public reader chrome: the engine ships a Studio control deck, a dev "badge",
+  // and a usage "hint" that are authoring tools, not part of the published book.
+  // Hide them in normal mode; keep them in debug (?debug=1) for QA. The nav
+  // arrows and the page status text are real reader UI and stay visible.
+  if (!debug) {
+    html = html.replace(
+      "</head>",
+      `<style id="reader-chrome">
+        #deck, .badge, .hint { display: none !important; }
+      </style></head>`
+    );
+  }
 
   return html;
 }

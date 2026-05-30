@@ -15,21 +15,25 @@ function uploadsDir(): string {
   return process.env.UPLOADS_DIR || join(process.cwd(), "uploads");
 }
 
-function renderPlaceholder(assetId: string) {
-  const safe = assetId.replace(/[^a-zA-Z0-9-_]/g, "_");
-
+function renderPlaceholder() {
+  // Clean, reader-facing placeholder for a missing image: a neutral book-paper
+  // panel with a soft, generic picture glyph. Deliberately contains NO text and
+  // NO asset id — those are developer details that must never appear in the
+  // public reader. (The book engine surfaces ids only in its debug overlay.)
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">
   <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#e8e6df" />
-      <stop offset="100%" stop-color="#cfc9bc" />
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f6f5f1" />
+      <stop offset="100%" stop-color="#e9e7e0" />
     </linearGradient>
   </defs>
-  <rect width="1200" height="800" fill="url(#g)" />
-  <rect x="60" y="60" width="1080" height="680" rx="28" ry="28" fill="rgba(255,255,255,0.55)" stroke="rgba(40,40,40,0.2)" />
-  <text x="100" y="170" fill="#2a2a2a" font-size="54" font-family="Georgia, serif" font-weight="700">Asset Placeholder</text>
-  <text x="100" y="250" fill="#3a3a3a" font-size="38" font-family="Helvetica, Arial, sans-serif">${safe}</text>
+  <rect width="1200" height="800" fill="url(#bg)" />
+  <g opacity="0.55">
+    <rect x="470" y="300" width="260" height="200" rx="16" ry="16" fill="none" stroke="#b7b2a7" stroke-width="6" />
+    <circle cx="540" cy="362" r="20" fill="#b7b2a7" />
+    <path d="M484 486 L560 414 L612 466 L668 402 L716 470 L716 482 Q716 492 706 492 L494 492 Q484 492 484 482 Z" fill="#b7b2a7" />
+  </g>
 </svg>`;
 
   return new NextResponse(svg, {
@@ -47,7 +51,7 @@ export async function GET(_: Request, { params }: Params) {
   const rows = await db.select().from(assets).where(eq(assets.id, assetId)).limit(1);
   const asset = rows[0];
   if (!asset) {
-    return renderPlaceholder(assetId);
+    return renderPlaceholder();
   }
 
   try {
@@ -60,6 +64,6 @@ export async function GET(_: Request, { params }: Params) {
       },
     });
   } catch {
-    return renderPlaceholder(assetId);
+    return renderPlaceholder();
   }
 }

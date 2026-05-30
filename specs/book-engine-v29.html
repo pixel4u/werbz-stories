@@ -425,7 +425,20 @@
     }
 
     /* ---------------- Meshes ---------------- */
+    // A shared blank white texture so a page mesh always has a valid map even
+    // before content loads or when a spread has no opposite leaf (avoids the
+    // "THREE.Material: parameter 'map' has value of undefined" warning).
+    let _blankTex = null;
+    function blankTexture() {
+      if (_blankTex) return _blankTex;
+      const c = document.createElement("canvas"); c.width = c.height = 4;
+      const x = c.getContext("2d"); x.fillStyle = "#ffffff"; x.fillRect(0, 0, 4, 4);
+      _blankTex = new THREE.CanvasTexture(c); _blankTex.colorSpace = THREE.SRGBColorSpace; _blankTex.needsUpdate = true;
+      return _blankTex;
+    }
+
     function createRestingPage(side, texture, opacity = 1) {
+      if (!texture) texture = blankTexture();
       const sign = side === "right" ? 1 : -1, c = config.restCurl;
       const positions = [], uvs = [], indices = [];
       for (let zi = 0; zi <= RES_Z; zi++) {
