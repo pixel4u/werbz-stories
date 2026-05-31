@@ -81,7 +81,7 @@ export function CoverUploadForm({ storybookId, currentAssetId }: CoverUploadForm
 
   return (
     <div style={{ border: "1px dashed #cbd5e1", borderRadius: 8, padding: "0.75rem", background: "#f8fafc" }}>
-      <label style={{ display: "block", marginBottom: "0.4rem", fontWeight: 600 }}>Upload cover image (auto-links coverAssetId)</label>
+      <label style={{ display: "block", marginBottom: "0.4rem", fontWeight: 600 }}>Upload cover image</label>
       <p style={{ margin: "0 0 0.6rem", color: "#64748b", fontSize: 13 }}>Supported: JPG, PNG, WEBP, GIF. Max 10MB.</p>
       <div
         onDragOver={(event) => {

@@ -226,6 +226,16 @@ export async function setStorybookStatus(id: string, status: "draft" | "publishe
     .where(eq(storybooks.id, id));
 }
 
+// Set only the library thumbnail (coverAssetId). The reader's front cover comes
+// from the canonical cover PAGE, not this field.
+export async function setStorybookCoverAsset(id: string, assetId: string): Promise<void> {
+  const db = getDb();
+  await db
+    .update(storybooks)
+    .set({ coverAssetId: assetId, updatedAt: new Date() })
+    .where(eq(storybooks.id, id));
+}
+
 export async function deleteStorybook(id: string): Promise<void> {
   const db = getDb();
   await db.delete(storybooks).where(eq(storybooks.id, id));
@@ -397,17 +407,51 @@ async function ensureStorybookStructure(storybookId: string): Promise<StoryStruc
 export async function addPage(
   storybookId: string,
   kind: "text" | "image" | "video" | "embed",
-  side: PageSideType
+  side?: PageSideType,
+  options?: { insertBeforeEnd?: boolean }
 ): Promise<string> {
   const db = getDb();
-  const safeSide = PageSide.parse(side);
   const content = PageContent.parse(defaultContentForType(kind));
 
   const maxRows = await db
     .select({ max: sql<number>`coalesce(max(${pages.position}), -1)::int` })
     .from(pages)
     .where(eq(pages.storybookId, storybookId));
-  const nextPosition = Number(maxRows[0]?.max ?? -1) + 1;
+  let nextPosition = Number(maxRows[0]?.max ?? -1) + 1;
+
+  // A single "Add Page" should land as the last STORY page, just before the End,
+  // not replace the End. When requested and an end page exists, take the end's
+  // slot (it shifts back during normalization). Bulk upload omits this and
+  // appends in order so the final image stays the End.
+  if (options?.insertBeforeEnd) {
+    const bookRows = await db
+      .select({ endPageId: storybooks.endPageId })
+      .from(storybooks)
+      .where(eq(storybooks.id, storybookId))
+      .limit(1);
+    const endPageId = bookRows[0]?.endPageId ?? null;
+    if (endPageId) {
+      const endRows = await db
+        .select({ position: pages.position })
+        .from(pages)
+        .where(eq(pages.id, endPageId))
+        .limit(1);
+      if (endRows[0]) {
+        const endPos = endRows[0].position;
+        // Open a slot at the end's position by pushing the end (and anything at
+        // or after it) back by one.
+        await db
+          .update(pages)
+          .set({ position: sql`${pages.position} + 1` })
+          .where(and(eq(pages.storybookId, storybookId), sql`${pages.position} >= ${endPos}`));
+        nextPosition = endPos;
+      }
+    }
+  }
+
+  // Spread side is a presentation detail the admin never sets manually: derive
+  // it from position (even = left, odd = right) unless a caller passes one.
+  const safeSide = PageSide.parse(side ?? (nextPosition % 2 === 0 ? "left" : "right"));
 
   const pageId = `page-${randomUUID()}`;
   await db.insert(pages).values({

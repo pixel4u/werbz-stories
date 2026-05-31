@@ -27,7 +27,6 @@ export function BulkUploadForm({ storybookId }: BulkUploadFormProps) {
   const [message, setMessage] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [useFirstAsCover, setUseFirstAsCover] = useState(true);
-  const [useLastAsEnd, setUseLastAsEnd] = useState(true);
 
   async function onSelect(filesList: FileList | null) {
     if (!filesList || filesList.length === 0) return;
@@ -38,7 +37,6 @@ export function BulkUploadForm({ storybookId }: BulkUploadFormProps) {
       const files = Array.from(filesList);
       const formData = new FormData();
       formData.set("useFirstAsCover", String(useFirstAsCover));
-      formData.set("useLastAsEnd", String(useLastAsEnd));
       for (let i = 0; i < files.length; i++) {
         const f = files[i];
         formData.append("files", f, f.name);
@@ -64,15 +62,13 @@ export function BulkUploadForm({ storybookId }: BulkUploadFormProps) {
 
   return (
     <div style={{ border: "1px solid #dbe3ef", borderRadius: 10, padding: "0.65rem", background: "#fff" }}>
-      <strong style={{ fontSize: 13 }}>Bulk Upload Pages</strong>
+      <strong style={{ fontSize: 13 }}>Upload all your book page images in order</strong>
       <p style={{ margin: "0.35rem 0 0.5rem", fontSize: 12, color: "#64748b" }}>
-        Upload multiple images in order. We auto-create image pages.
+        First image becomes the Cover, the last becomes the End, and everything in
+        between becomes story pages.
       </p>
-      <label style={{ display: "block", fontSize: 12, marginBottom: 4 }}>
-        <input type="checkbox" checked={useFirstAsCover} onChange={(e) => setUseFirstAsCover(e.target.checked)} /> Use first image as cover
-      </label>
       <label style={{ display: "block", fontSize: 12, marginBottom: 8 }}>
-        <input type="checkbox" checked={useLastAsEnd} onChange={(e) => setUseLastAsEnd(e.target.checked)} /> Treat last image as end/back page
+        <input type="checkbox" checked={useFirstAsCover} onChange={(e) => setUseFirstAsCover(e.target.checked)} /> Also use the first image as the library thumbnail
       </label>
       <input
         type="file"

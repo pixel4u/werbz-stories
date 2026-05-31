@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { isStudioAuthenticated } from "@/lib/studio-auth";
-import { addPage, uploadCoverAssetForStorybook, uploadImageAssetForPage } from "@/lib/studio-service";
+import { addPage, setStorybookCoverAsset, uploadImageAssetForPage } from "@/lib/studio-service";
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
@@ -32,11 +32,16 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     return NextResponse.json({ error: "No files uploaded" }, { status: 400 });
   }
 
+  // Canonical "Upload Full Book": EVERY image becomes an ordered image page.
+  // The first page then becomes the cover and the last the end via the
+  // storybook-structure invariants (ensureStorybookStructure runs inside addPage).
+  // useFirstAsCover only controls whether image 1 also becomes the library
+  // thumbnail (coverAssetId); the page order is what the reader actually uses.
   const useFirstAsCover = parseBoolean(String(formData.get("useFirstAsCover") ?? ""));
-  const useLastAsEnd = parseBoolean(String(formData.get("useLastAsEnd") ?? ""));
 
   try {
     const createdPageIds: string[] = [];
+    let firstPageAssetId: string | null = null;
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -48,26 +53,14 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       }
 
       const bytes = Buffer.from(await file.arrayBuffer());
-      const isFirst = i === 0;
-      const isLast = i === files.length - 1;
 
-      if (useFirstAsCover && isFirst) {
-        await uploadCoverAssetForStorybook({
-          storybookId,
-          fileName: file.name,
-          mimeType: file.type,
-          bytes,
-          width: parseIntField(formData.get(`w_${i}`)),
-          height: parseIntField(formData.get(`h_${i}`)),
-        });
-        continue;
-      }
-
+      // Side alternates left/right for clean spread grouping; canonical order
+      // (position) is the source of truth and is normalized inside addPage.
       const side: "left" | "right" = createdPageIds.length % 2 === 0 ? "left" : "right";
       const pageId = await addPage(storybookId, "image", side);
       createdPageIds.push(pageId);
 
-      await uploadImageAssetForPage({
+      const { assetId } = await uploadImageAssetForPage({
         storybookId,
         pageId,
         fileName: file.name,
@@ -78,10 +71,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         target: "page-image",
       });
 
-      if (useLastAsEnd && isLast) {
-        // No dedicated back-cover schema yet; this marks the final page with caption.
-        // The editor labels the final page as End/Back Cover.
-      }
+      if (i === 0) firstPageAssetId = assetId;
+    }
+
+    // Use the first uploaded image as the library thumbnail (coverAssetId).
+    if (useFirstAsCover && firstPageAssetId) {
+      await setStorybookCoverAsset(storybookId, firstPageAssetId);
     }
 
     return NextResponse.json({ ok: true, createdPages: createdPageIds.length });
