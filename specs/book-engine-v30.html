@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>PixiJS Storybook Page Curl Mesh (v30)</title>
+<script src="https://cdn.jsdelivr.net/npm/pixi.js@7.4.3/dist/pixi.min.js"></script>
+<style>
+  :root{
+    --bg1:#172022;
+    --bg2:#080c0e;
+    --gold:#e6c87a;
+    --paper:#f5ebd6;
+    --ink:#43362a;
+    --serif:Georgia,"Iowan Old Style","Palatino Linotype",serif;
+    --ui:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:radial-gradient(120% 90% at 50% 35%, rgba(255,224,176,.16), transparent 46%),radial-gradient(140% 120% at 50% 18%, #233032 0%, var(--bg1) 38%, var(--bg2) 100%);color:#f4ead9;font-family:var(--ui);user-select:none;-webkit-user-select:none;touch-action:none}
+  #app{width:100vw;height:100vh;overflow:hidden}
+  .title-tag{position:fixed;top:22px;left:50%;transform:translateX(-50%);font-family:var(--serif);font-style:italic;font-size:14px;letter-spacing:.04em;color:rgba(244,234,217,.60);opacity:0;transition:opacity .3s ease;pointer-events:none;z-index:10}
+  .title-tag.show{opacity:1}
+  .hint{position:fixed;left:50%;bottom:68px;transform:translateX(-50%);z-index:10;pointer-events:none;font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:rgba(244,234,217,.75);transition:opacity .3s ease;text-align:center}
+  .hint.hide{opacity:0}
+  .ui{position:fixed;left:0;right:0;bottom:max(14px, env(safe-area-inset-bottom));z-index:10;display:flex;justify-content:center;align-items:center;gap:22px}
+  button.nav{width:46px;height:46px;border-radius:50%;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:#f4ead9;cursor:pointer;display:grid;place-items:center;backdrop-filter:blur(8px);transition:.2s ease}
+  button.nav:hover{background:rgba(255,255,255,.14);transform:translateY(-1px)}
+  button.nav:disabled{opacity:.28;cursor:default;transform:none}
+  button.nav svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .dots{display:flex;align-items:center;gap:8px}
+  .dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.23);transition:.25s ease}
+  .dot.on{background:var(--gold);box-shadow:0 0 10px var(--gold);transform:scale(1.28)}
+  .dbg{position:fixed;top:10px;left:10px;z-index:50;display:none;background:rgba(0,0,0,.62);color:#9ff;white-space:pre;font:11px ui-monospace,Menlo,Consolas,monospace;padding:8px 10px;border-radius:6px}
+  body.debug .dbg{display:block}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="title-tag" id="titleTag">Loading Storybook…</div>
+<div class="hint" id="hint">Drag the page edge or use arrows</div>
+<div class="ui">
+  <button class="nav" id="prevBtn" aria-label="Previous page"><svg viewBox="0 0 24 24"><polyline points="15 5 8 12 15 19"/></svg></button>
+  <div class="dots" id="dots"></div>
+  <button class="nav" id="nextBtn" aria-label="Next page"><svg viewBox="0 0 24 24"><polyline points="9 5 16 12 9 19"/></svg></button>
+</div>
+<div class="dbg" id="dbg"></div>
+<script>
+const query = new URLSearchParams(location.search);
+const DEBUG_MODE = query.get('debug') === '1';
+if (DEBUG_MODE) document.body.classList.add('debug');
+const slug = query.get('slug') || location.pathname.split('/').filter(Boolean).at(-1) || 'the-lighthouse';
+
+const MOCK = {
+  id:'sb-mock', slug:'the-lighthouse', title:'The Lighthouse', summary:'A seeded storybook',
+  cover:{ kicker:'Stories', title:'The Lighthouse', author:'werbz' },
+  back:{ line:'Thanks for reading.', author:'werbz' },
+  pages:[
+    { id:'p0', position:0, side:'left', content:{ kind:'text', title:'Welcome', body:'Mock fallback while API is unavailable.', align:'left' } },
+    { id:'p1', position:1, side:'right', content:{ kind:'image', assetId:'asset-lighthouse-hero', fit:'cover', caption:'Lighthouse hero' } },
+    { id:'p2', position:2, side:'left', content:{ kind:'video', poster:'asset-sea-poster' } },
+    { id:'p3', position:3, side:'right', content:{ kind:'embed', source:{type:'url',url:'https://example.com'}, poster:'asset-wave-poster' } },
+  ]
+};
+
+function getAssetUrl(assetId){ return '/api/assets/' + encodeURIComponent(assetId); }
+
+async function loadStorybook() {
+  try {
+    const res = await fetch('/api/storybooks/' + encodeURIComponent(slug), { credentials:'same-origin' });
+    if (!res.ok) throw new Error('API ' + res.status);
+    const story = await res.json();
+    if (!story || !Array.isArray(story.pages)) throw new Error('Invalid story payload');
+    return normalizeStorybook(story);
+  } catch {
+    return normalizeStorybook(MOCK);
+  }
+}
+
+function normalizeStorybook(story){
+  return {
+    id: story.id || 'sb',
+    slug: story.slug || slug,
+    title: story.title || 'Untitled Storybook',
+    summary: story.summary || '',
+    cover: story.cover || { kicker:'Stories', title: story.title || 'Untitled Storybook', author:'werbz' },
+    back: story.back || { line:'The End', author:'werbz' },
+    pages: (story.pages || []).map((p, i) => {
+      const c = p.content || p;
+      return {
+        id: p.id || 'p-' + i,
+        position: p.position ?? i,
+        side: p.side || (i % 2 ? 'right' : 'left'),
+        content: {
+          kind: c.kind || 'text',
+          eyebrow: c.eyebrow || '',
+          title: c.title || '',
+          body: c.body || '',
+          align: c.align || 'left',
+          background: c.background,
+          backgroundAssetId: c.backgroundAssetId,
+          fit: c.fit || 'cover',
+          assetId: c.assetId,
+          caption: c.caption,
+          poster: c.poster,
+          source: c.source,
+        }
+      };
+    })
+  };
+}
+
+const app = new PIXI.Application({ resizeTo: window, antialias:true, autoDensity:true, resolution:Math.min(window.devicePixelRatio||1,2), backgroundAlpha:0 });
+document.getElementById('app').appendChild(app.view);
+PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.LINEAR;
+
+const root = new PIXI.Container();
+const floorLayer = new PIXI.Container();
+const stackLayer = new PIXI.Container();
+const activeLayer = new PIXI.Container();
+const chromeLayer = new PIXI.Container();
+root.addChild(floorLayer, stackLayer, activeLayer, chromeLayer);
+app.stage.addChild(root);
+
+let STORYBOOK = MOCK;
+let PAGE_W = 360, PAGE_H = 510, SPINE_X = 0, BOOK_Y = 0;
+const SEG_X = 42, SEG_Y = 8;
+let leaves = [], flipped = 0, active = null, drag = null, hasInteracted = false;
+
+function buildFaces(sb){
+  const faces=[];
+  faces.push({ type:'cover-front', data:sb.cover });
+  faces.push({ type:'endpaper' });
+  sb.pages.forEach(p => faces.push({ type:'content', data:p.content, pid:p.id }));
+  if (sb.pages.length % 2 !== 0) faces.push({ type:'endpaper' });
+  faces.push({ type:'endpaper' });
+  faces.push({ type:'cover-back', data:sb.back });
+  return faces;
+}
+function pairFacesIntoLeaves(faces){ const out=[]; for(let i=0;i<faces.length;i+=2) out.push({ index:i/2, front:faces[i], back:faces[i+1], isFrontCover:i===0, isBackCover:i>=faces.length-2 }); return out; }
+
+function textureForFace(face, side){ const c=document.createElement('canvas'); c.width=900;c.height=1278; const ctx=c.getContext('2d'); drawFace(ctx,c.width,c.height,face,side); return PIXI.Texture.from(c); }
+function drawFace(ctx,w,h,face,side){
+  ctx.clearRect(0,0,w,h);
+  if(side==='back'){ ctx.save(); ctx.translate(w,0); ctx.scale(-1,1); drawFaceContent(ctx,w,h,face,side); ctx.restore(); return; }
+  drawFaceContent(ctx,w,h,face,side);
+}
+function drawFaceContent(ctx,w,h,face,side){
+  if(face.type==='cover-front'){ drawCover(ctx,w,h,face.data,false); return; }
+  if(face.type==='cover-back'){ drawCover(ctx,w,h,face.data,true); return; }
+  if(face.type==='endpaper'){ drawEndpaper(ctx,w,h); return; }
+  const c=face.data||{};
+  if(c.kind==='text'){ drawPaper(ctx,w,h,side,c.background); drawTextPage(ctx,w,h,c); return; }
+  if(c.kind==='image'){ drawAssetPage(ctx,w,h,c.assetId,c.fit,c.caption,'IMAGE'); return; }
+  if(c.kind==='video'){ drawAssetPage(ctx,w,h,c.poster,'cover',c.caption,'VIDEO'); return; }
+  if(c.kind==='embed'){ drawAssetPage(ctx,w,h,c.poster,'cover',c.caption,'EMBED'); return; }
+  drawPaper(ctx,w,h,side);
+}
+
+function drawPaper(ctx,w,h,side,bg){ ctx.fillStyle = bg || '#ffffff'; ctx.fillRect(0,0,w,h); const gutter=ctx.createLinearGradient(side==='front'?0:w,0,side==='front'?w*.25:w*.75,0); gutter.addColorStop(0,'rgba(0,0,0,.12)'); gutter.addColorStop(1,'rgba(0,0,0,0)'); ctx.fillStyle=gutter; ctx.fillRect(0,0,w,h); }
+function drawEndpaper(ctx,w,h){ const g=ctx.createLinearGradient(0,0,w,h); g.addColorStop(0,'#f7f2e8'); g.addColorStop(1,'#e9e1cf'); ctx.fillStyle=g; ctx.fillRect(0,0,w,h); }
+function drawCover(ctx,w,h,data,isBack){ const g=ctx.createLinearGradient(0,0,0,h); g.addColorStop(0,'#2b365f'); g.addColorStop(1,'#10172f'); ctx.fillStyle=g; ctx.fillRect(0,0,w,h); ctx.fillStyle='#f1dca2'; ctx.textAlign='center'; if(!isBack){ ctx.font='600 24px system-ui,sans-serif'; ctx.fillText((data?.kicker||'Stories').toUpperCase(),w/2,h*.34); ctx.font='700 70px Georgia,serif'; wrapLines(ctx,data?.title||STORYBOOK.title,w/2,h*.48,w*.75,78,true); ctx.font='600 24px system-ui,sans-serif'; ctx.fillText((data?.author||'').toUpperCase(),w/2,h*.74); } else { ctx.font='italic 34px Georgia,serif'; wrapLines(ctx,data?.line||'The End',w/2,h*.52,w*.75,44,true); ctx.font='600 24px system-ui,sans-serif'; ctx.fillText((data?.author||'').toUpperCase(),w/2,h*.70); } }
+function drawTextPage(ctx,w,h,c){ let y=150; const align = c.align==='center'?'center':c.align==='right'?'right':'left'; const x = align==='center'?w/2:92; ctx.textAlign=align; if(c.eyebrow){ ctx.fillStyle='#8e8375'; ctx.font='600 22px system-ui,sans-serif'; ctx.fillText(String(c.eyebrow).toUpperCase(),x,y); y+=58; } if(c.title){ ctx.fillStyle='#111'; ctx.font='700 72px Georgia,serif'; y=wrapLines(ctx,String(c.title),x,y,w-180,84,align==='center')+24; } if(c.body){ ctx.fillStyle='#2e2e2e'; ctx.font='400 40px "Helvetica Neue",sans-serif'; const body = Array.isArray(c.body)?c.body.join('\n\n'):String(c.body); body.split(/\n\n/).forEach(p=>{ y=wrapLines(ctx,p,x,y,w-180,56,align==='center')+16; }); } }
+function drawAssetPage(ctx,w,h,assetId,fit='cover',caption='',kind='IMAGE'){
+  drawPaper(ctx,w,h,'front');
+  if (assetId) {
+    const img = new Image();
+    img.onload = () => { fitImage(ctx,w,h,img,fit); if(caption){ drawCaption(ctx,w,h,caption); } };
+    img.src = getAssetUrl(assetId);
+  } else {
+    ctx.fillStyle='#d9d9d9'; ctx.fillRect(60,60,w-120,h-120);
+    if (DEBUG_MODE) { ctx.fillStyle='#333'; ctx.font='700 42px Georgia,serif'; ctx.fillText(kind + ' placeholder', 96, 160); }
+  }
+}
+function fitImage(ctx,w,h,image,fit){ const sw=image.naturalWidth||image.width, sh=image.naturalHeight||image.height; if(!sw||!sh)return; const cr=w/h, ir=sw/sh; let dw=w, dh=h; if(fit==='contain'){ if(ir>cr){ dw=w; dh=w/ir; } else { dh=h; dw=h*ir; } } else { if(ir>cr){ dh=h; dw=h*ir; } else { dw=w; dh=w/ir; } } ctx.drawImage(image,(w-dw)/2,(h-dh)/2,dw,dh); }
+function drawCaption(ctx,w,h,text){ ctx.fillStyle='rgba(0,0,0,.55)'; roundRect(ctx,60,h-130,w-120,74,16); ctx.fill(); ctx.fillStyle='#fff'; ctx.font='500 30px system-ui,sans-serif'; ctx.textAlign='left'; ctx.fillText(text,88,h-84); }
+
+function createPageMesh(texture){ const vertices = new Float32Array((SEG_X+1)*(SEG_Y+1)*2); const uvs = new Float32Array((SEG_X+1)*(SEG_Y+1)*2); const indices=[]; let k=0; for(let y=0;y<=SEG_Y;y++){ for(let x=0;x<=SEG_X;x++){ const u=x/SEG_X,v=y/SEG_Y; vertices[k*2]=u*PAGE_W; vertices[k*2+1]=v*PAGE_H; uvs[k*2]=u; uvs[k*2+1]=v; k++; } } for(let y=0;y<SEG_Y;y++){ for(let x=0;x<SEG_X;x++){ const a=y*(SEG_X+1)+x,b=a+1,c=a+(SEG_X+1),d=c+1; indices.push(a,c,b,b,c,d); } } const mesh = new PIXI.SimpleMesh(texture, vertices, uvs, new Uint16Array(indices), PIXI.DRAW_MODES.TRIANGLES); mesh.autoUpdate=true; return { mesh, vertices }; }
+function createLeaf(def){ const container = new PIXI.Container(); const front=createPageMesh(textureForFace(def.front,'front')); const back=createPageMesh(textureForFace(def.back,'back')); container.addChild(back.mesh,front.mesh); const shadow=new PIXI.Graphics(); container.addChild(shadow); const leaf={ ...def, container, front, back, shadow, progress:0, displaySide:'front', active:false, isCover:def.isFrontCover||def.isBackCover }; stackLayer.addChild(container); updateLeafGeometry(leaf,0,false); return leaf; }
+
+function updateLeafGeometry(leaf, progress, activeCurl){ progress=clamp(progress,0,1); leaf.progress=progress; const p=easeInOutCubic(progress); const mid=Math.sin(Math.PI*progress); const curl=activeCurl ? mid * (leaf.isCover ? 0.10 : 0.22) : 0; const lift=activeCurl ? mid * 14 : 0; fillMeshVertices(leaf.front,p,curl,lift,+1); fillMeshVertices(leaf.back,p,curl,lift,-1); if(progress<=.001) leaf.displaySide='front'; else if(progress>=.999) leaf.displaySide='back'; else if(activeCurl){ if(progress>0.515) leaf.displaySide='back'; else if(progress<0.485) leaf.displaySide='front'; } else leaf.displaySide = progress < 0.5 ? 'front' : 'back'; leaf.front.mesh.visible = leaf.displaySide==='front'; leaf.back.mesh.visible=leaf.displaySide==='back'; leaf.front.mesh.vertices = leaf.front.vertices; leaf.back.mesh.vertices = leaf.back.vertices; leaf.front.mesh.dirty++; leaf.back.mesh.dirty++; const shadow=leaf.shadow; shadow.clear(); if(activeCurl && mid > 0.02){ shadow.beginFill(0x000000, 0.06 + mid * 0.08); shadow.drawEllipse(lerp(PAGE_W*0.25,-PAGE_W*0.25,progress), 0, PAGE_W*0.33, PAGE_H*0.2); shadow.endFill(); shadow.filters=[new PIXI.BlurFilter(30,6)]; } else shadow.filters=null; }
+function fillMeshVertices(page,p,curl,lift,sideSign){ const arr=page.vertices; let k=0; for(let y=0;y<=SEG_Y;y++){ for(let x=0;x<=SEG_X;x++){ const u=x/SEG_X,v=y/SEG_Y; const pt=pagePoint2D(u,v,p,curl,lift,sideSign); arr[k++]=pt.x; arr[k++]=pt.y; } } }
+function pagePoint2D(u,v,p,curl,lift,sideSign){ const yBase=(v-.5)*PAGE_H; const baseX=lerp(u*PAGE_W,-u*PAGE_W,p); const perspective=1-Math.sin(Math.PI*p)*0.34; let x=baseX*perspective; const far=smoothstep(.2,1,u); const wave=Math.sin(u*Math.PI); const dir=p<.5?-1:1; x += dir * curl * PAGE_W * wave * 0.34 * smoothstep(.03,.25,u); let y=yBase; y += Math.sin((v-.5)*Math.PI) * curl * 32 * far; y -= lift * Math.sin(Math.PI*u) * .24; x += dir * far * far * curl * PAGE_W * .18; x += sideSign * 0.04 * Math.sin(Math.PI*p); return {x,y}; }
+
+function resize(){ const vw=window.innerWidth,vh=window.innerHeight; const availableW=Math.max(220,vw-24), availableH=Math.max(260,vh-112); PAGE_W=Math.min(availableW/2,availableH/1.42); PAGE_W=Math.min(PAGE_W,680); PAGE_W=Math.max(PAGE_W,vw<560?132:170); PAGE_H=PAGE_W*1.42; SPINE_X=vw/2; BOOK_Y=vh/2-8; root.position.set(SPINE_X,BOOK_Y); leaves.forEach(l=>updateLeafGeometry(l,l.progress,l.active)); updateRootShift(); drawFloor(); }
+function updateRootShift(){ root.x = SPINE_X + closedShiftFor(flipped); document.getElementById('titleTag').classList.toggle('show', flipped > 0 && flipped < leaves.length); }
+function closedShiftFor(f){ if(f<=0) return -PAGE_W/2; if(f>=leaves.length) return PAGE_W/2; return 0; }
+function layoutAll(){ leaves.forEach((leaf,i)=>{ const p=i<flipped?1:0; leaf.active=false; leaf.displaySide=p<.5?'front':'back'; updateLeafGeometry(leaf,p,false); leaf.container.zIndex=i<flipped?i:leaves.length-i; if(flipped===0) leaf.container.visible=i===0; else if(flipped===leaves.length) leaf.container.visible=i===leaves.length-1; else leaf.container.visible=true; }); updateRootShift(); updateUI(); drawFloor(); }
+function drawFloor(){ floorLayer.removeChildren(); const shift=root.x-SPINE_X; const openness=clamp(1-Math.abs(shift)/(PAGE_W*.5),0,1); const shadowCenterX=-shift; const g=new PIXI.Graphics(); g.beginFill(0x000000, .24 + openness*.06); g.drawEllipse(shadowCenterX, PAGE_H*.55, PAGE_W*(1.05+openness*.9)*.5, PAGE_H*.16); g.endFill(); g.filters=[new PIXI.BlurFilter(20+openness*8,5)]; floorLayer.addChild(g); }
+
+function canNext(){ return !active && flipped < leaves.length; }
+function canPrev(){ return !active && flipped > 0; }
+function goNext(){ if(!canNext()) return; const leaf=leaves[flipped]; startAutoFlip(flipped,0,1,true,leaf); }
+function goPrev(){ if(!canPrev()) return; const leaf=leaves[flipped-1]; startAutoFlip(flipped-1,1,0,false,leaf); }
+function startAutoFlip(index,from,to,forward,leaf){ if(forward && flipped===0) leaves.forEach(l=>l.container.visible=true); leaf.active=true; updateLeafGeometry(leaf,from,false); active={ type:'auto', leaf, index, from, to, forward, start:performance.now(), duration:leaf.isCover?900:680, commit:true }; document.getElementById('hint').classList.add('hide'); }
+function tick(){ if(!active || active.type!=='auto') return; const t=clamp((performance.now()-active.start)/active.duration,0,1); const e=easeOutCubic(t); const p=lerp(active.from,active.to,e); updateLeafGeometry(active.leaf,p,t>.01&&t<.94); const intendedFlipped = active.forward ? flipped+1 : flipped-1; const amount = active.forward ? p : (1-p); root.x = SPINE_X + lerp(closedShiftFor(flipped), closedShiftFor(intendedFlipped), amount); if(t>=1){ flipped = active.commit ? intendedFlipped : flipped; active.leaf.active=false; active=null; layoutAll(); } drawFloor(); updateUI(); }
+
+app.view.addEventListener('pointerdown',(e)=>{ if(active) return; const forward=e.clientX>window.innerWidth/2; if(forward&&flipped>=leaves.length) return; if(!forward&&flipped<=0) return; const index=forward?flipped:flipped-1; const leaf=leaves[index]; if(forward&&flipped===0) leaves.forEach(l=>l.container.visible=true); drag={ pointerId:e.pointerId,startX:e.clientX,forward,index,leaf,moved:0,progress:forward?0:1 }; active={ type:'drag', leaf, index, forward }; leaf.active=true; app.view.setPointerCapture(e.pointerId); updateLeafGeometry(leaf,drag.progress,false); drawFloor(); updateUI(); document.getElementById('hint').classList.add('hide'); });
+app.view.addEventListener('pointermove',(e)=>{ if(!drag||e.pointerId!==drag.pointerId) return; const dx=e.clientX-drag.startX; drag.moved=Math.max(drag.moved,Math.abs(dx)); const p = drag.forward ? clamp((-dx)/(PAGE_W*.88),0,1) : clamp(1-(dx)/(PAGE_W*.88),0,1); drag.progress=p; updateLeafGeometry(drag.leaf,p,drag.moved>2); const intendedFlipped=flipped+(drag.forward?1:-1); const amount=drag.forward?p:(1-p); root.x=SPINE_X+lerp(closedShiftFor(flipped),closedShiftFor(intendedFlipped),amount); drawFloor(); updateUI(); });
+app.view.addEventListener('pointerup',endDrag); app.view.addEventListener('pointercancel',endDrag);
+function endDrag(e){ if(!drag||(e&&e.pointerId!==drag.pointerId)) return; const d=drag; drag=null; hasInteracted=true; const clicked=d.moved<5; if(clicked){ active=null; d.leaf.active=false; layoutAll(); d.forward?goNext():goPrev(); return; } const complete=d.forward?d.progress>.42:d.progress<.58; active={ type:'auto', leaf:d.leaf,index:d.index,from:d.progress,to:complete?(d.forward?1:0):(d.forward?0:1),forward:d.forward,start:performance.now(),duration:complete?520:420,commit:complete }; }
+
+const prevBtn=document.getElementById('prevBtn'); const nextBtn=document.getElementById('nextBtn'); const dotsEl=document.getElementById('dots'); const dbgEl=document.getElementById('dbg');
+prevBtn.addEventListener('click',goPrev); nextBtn.addEventListener('click',goNext);
+window.addEventListener('keydown',(e)=>{ if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();goNext();} else if(e.key==='ArrowLeft'){e.preventDefault();goPrev();} else if(e.key.toLowerCase()==='d'){document.body.classList.toggle('debug'); updateUI();} });
+function createDots(){ dotsEl.innerHTML=''; leaves.forEach(()=>{ const dot=document.createElement('div'); dot.className='dot'; dotsEl.appendChild(dot); }); }
+function updateUI(){ prevBtn.disabled=!!active||flipped<=0; nextBtn.disabled=!!active||flipped>=leaves.length; [...dotsEl.children].forEach((d,i)=>d.classList.toggle('on',i<flipped)); document.getElementById('hint').classList.toggle('hide',hasInteracted||flipped>0); if(document.body.classList.contains('debug')){ const state=flipped===0?'CLOSED FRONT COVER':flipped===leaves.length?'CLOSED BACK COVER':'OPEN SPREAD'; const p=active?.leaf?.progress?.toFixed(3) ?? '-'; dbgEl.textContent=`PixiJS v30 page curl\nslug: ${slug}\nstate: ${state}\nflipped: ${flipped}/${leaves.length}\nactive: ${active?active.type:'none'} p=${p}`; } }
+
+function wrapLines(ctx,text,x,y,maxW,lineH){ const words=String(text).split(/\s+/); let line=''; for(let i=0;i<words.length;i++){ const test=line?line+' '+words[i]:words[i]; if(ctx.measureText(test).width>maxW && line){ ctx.fillText(line,x,y); line=words[i]; y+=lineH; } else line=test; } if(line) ctx.fillText(line,x,y); return y+lineH; }
+function roundRect(ctx,x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r); ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h); ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r); ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y); ctx.closePath(); }
+function clamp(v,min,max){ return Math.max(min,Math.min(max,v)); }
+function lerp(a,b,t){ return a+(b-a)*t; }
+function easeOutCubic(t){ return 1-Math.pow(1-t,3); }
+function easeInOutCubic(t){ return t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2; }
+function smoothstep(edge0,edge1,x){ const t=clamp((x-edge0)/(edge1-edge0),0,1); return t*t*(3-2*t); }
+
+async function init(){
+  STORYBOOK = await loadStorybook();
+  document.getElementById('titleTag').textContent = STORYBOOK.title || 'Storybook';
+  const faces=buildFaces(STORYBOOK); const defs=pairFacesIntoLeaves(faces); leaves=defs.map(createLeaf); createDots(); flipped=0; active=null; resize(); layoutAll(); app.ticker.add(tick);
+}
+window.addEventListener('resize',resize);
+init();
+</script>
+</body>
+</html>

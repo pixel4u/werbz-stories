@@ -415,7 +415,21 @@ interface Params {
 
 export async function GET(request: Request, { params }: Params) {
   const { slug } = await params;
-  const debug = new URL(request.url).searchParams.get("debug") === "1";
+  const searchParams = new URL(request.url).searchParams;
+  const debug = searchParams.get("debug") === "1";
+  const engine = searchParams.get("engine");
+
+  if (engine === "v30") {
+    const sourcePath = join(process.cwd(), "specs", "book-engine-v30.html");
+    const html = readFileSync(sourcePath, "utf8");
+    return new NextResponse(html, {
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    });
+  }
+
   const html = buildEngineHtml(slug, debug);
 
   return new NextResponse(html, {
