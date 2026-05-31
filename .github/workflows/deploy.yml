@@ -59,7 +59,7 @@ jobs:
             mkdir -p .next
 
             echo "==> build"
-            pnpm build
+            pnpm exec next build --webpack
 
             echo "==> db migrate (no seed)"
             pnpm db:migrate
