@@ -52,8 +52,11 @@ jobs:
             echo "==> install deps"
             pnpm install --frozen-lockfile
 
-            echo "==> clear stale next lock files (safe)"
-            rm -f .next/lock .next/build.lock .next/trace.lock || true
+            echo "==> clean previous Next build output"
+            # Avoid intermittent Turbopack temp-file ENOENT issues by building
+            # from a clean .next directory each deploy.
+            rm -rf .next
+            mkdir -p .next
 
             echo "==> build"
             pnpm build
