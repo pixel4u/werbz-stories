@@ -413,40 +413,46 @@ interface Params {
   params: Promise<{ slug: string }>;
 }
 
+const HTML_HEADERS = {
+  "content-type": "text/html; charset=utf-8",
+  "cache-control": "no-store",
+} as const;
+
+// Serve a self-contained engine HTML file verbatim. These engines load their
+// canonical story data and Pixi (/api/book/pixi) themselves, so the server does
+// not transform them — keeping one unambiguous source of truth per engine file.
+function serveEngineFile(fileName: string): NextResponse {
+  const html = readFileSync(join(process.cwd(), "specs", fileName), "utf8");
+  return new NextResponse(html, { headers: HTML_HEADERS });
+}
+
+/*
+ * ACTIVE READER ENGINE
+ * --------------------
+ * Default: specs/best.html (PixiJS page-curl), reached by /api/book/[slug] with
+ * no query params AND by ?engine=best. This is what BookViewer / the public
+ * reader loads. Pixi is served from /api/book/pixi (vendored from node_modules).
+ *
+ * Older engines remain ONLY as explicit debug/reference escape hatches:
+ *   ?engine=v30  -> specs/book-engine-v30.html (Pixi, reference)
+ *   ?engine=v29  -> server-transformed Three.js engine (legacy buildEngineHtml)
+ * Nothing reader-facing depends on them by default.
+ */
 export async function GET(request: Request, { params }: Params) {
   const { slug } = await params;
   const searchParams = new URL(request.url).searchParams;
   const debug = searchParams.get("debug") === "1";
-  const engine = searchParams.get("engine");
+  const engine = searchParams.get("engine") ?? "best"; // default to the stable best engine
+
+  if (engine === "v29") {
+    // Legacy Three.js engine, server-side transformed. Debug/reference only.
+    return new NextResponse(buildEngineHtml(slug, debug), { headers: HTML_HEADERS });
+  }
 
   if (engine === "v30") {
-    const sourcePath = join(process.cwd(), "specs", "book-engine-v30.html");
-    const html = readFileSync(sourcePath, "utf8");
-    return new NextResponse(html, {
-      headers: {
-        "content-type": "text/html; charset=utf-8",
-        "cache-control": "no-store",
-      },
-    });
+    return serveEngineFile("book-engine-v30.html");
   }
 
-  if (engine === "best") {
-    const sourcePath = join(process.cwd(), "specs", "best.html");
-    const html = readFileSync(sourcePath, "utf8");
-    return new NextResponse(html, {
-      headers: {
-        "content-type": "text/html; charset=utf-8",
-        "cache-control": "no-store",
-      },
-    });
-  }
-
-  const html = buildEngineHtml(slug, debug);
-
-  return new NextResponse(html, {
-    headers: {
-      "content-type": "text/html; charset=utf-8",
-      "cache-control": "no-store",
-    },
-  });
+  // Default + ?engine=best: the active public reader engine.
+  return serveEngineFile("best.html");
 }

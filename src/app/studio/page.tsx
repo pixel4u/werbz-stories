@@ -175,7 +175,7 @@ export default async function StudioPage({
                 <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
                   <StatusBadge status={book.status} />
                   <Link
-                    href={`/${book.slug}`}
+                    href={`/api/book/${encodeURIComponent(book.slug)}?engine=best&slug=${encodeURIComponent(book.slug)}`}
                     target="_blank"
                     style={{ fontSize: 13, color: "#1f2937", textDecoration: "none", border: "1px solid #e5e7eb", borderRadius: 999, padding: "0.2rem 0.6rem" }}
                   >

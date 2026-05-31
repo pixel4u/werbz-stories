@@ -7,13 +7,26 @@ Standalone Stories platform for `werbz.com`.
 Production is live with:
 - Public Library at `/`
 - OTP-gated Story Reader at `/[slug]`
-- 3D Book viewer (v28 runtime based on v27 tuning)
+- 3D Book viewer (active engine: `specs/best.html`, see below)
 - Studio auth + dashboard CRUD at `/studio`
 - Studio page editor CRUD at `/studio/[id]`
 - Studio analytics at `/studio/analytics`
 - Local VPS file uploads for image assets (Prompt 5)
 
-Latest known project commit in this repo: `c746674`.
+## Reader engine (source of truth)
+
+- **Active reader engine: `specs/best.html`** (PixiJS page-curl), served by
+  `/api/book/[slug]` — the no-query-param URL and `?engine=best` are identical.
+  `BookViewer` (the public reader) loads `?engine=best`.
+- **Pixi** is served from a single source: **`/api/book/pixi`** (vendored from
+  `node_modules`). Engine HTML references `/api/book/pixi` directly; do not point
+  it at a CDN or a `/public` copy.
+- The engine maps the canonical story payload: `storybook.cover` → first face,
+  `storybook.pages[]` → ordered middle faces, `storybook.end` → final face.
+- Older engines are explicit debug/reference escape hatches only:
+  `?engine=v30` (`specs/book-engine-v30.html`) and `?engine=v29` (legacy
+  server-transformed Three.js engine). Nothing reader-facing depends on them.
+- `?debug=1` enables the engine's debug overlay; normal mode shows no debug labels.
 
 ## Stack
 

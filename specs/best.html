@@ -4,7 +4,9 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>PixiJS Storybook Page Curl Mesh</title>
-<script src="/pixi-7.4.3.min.js"></script>
+<!-- Pixi is served from the app's single source of truth: /api/book/pixi
+     (vendored from node_modules). Do not point this at a CDN or /public copy. -->
+<script src="/api/book/pixi"></script>
 <style>
   :root{
     --bg1:#172022;
