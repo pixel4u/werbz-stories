@@ -430,6 +430,17 @@ export async function GET(request: Request, { params }: Params) {
     });
   }
 
+  if (engine === "best") {
+    const sourcePath = join(process.cwd(), "specs", "best.html");
+    const html = readFileSync(sourcePath, "utf8");
+    return new NextResponse(html, {
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    });
+  }
+
   const html = buildEngineHtml(slug, debug);
 
   return new NextResponse(html, {

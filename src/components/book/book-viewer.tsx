@@ -14,8 +14,8 @@ export function BookViewer({ slug }: BookViewerProps) {
   const src = useMemo(() => {
     const base = `/api/book/${encodeURIComponent(slug)}`;
     const debug = searchParams.get("debug");
-    if (debug === "1") return `${base}?debug=1`;
-    return base;
+    if (debug === "1") return `${base}?engine=best&debug=1`;
+    return `${base}?engine=best`;
   }, [slug, searchParams]);
 
   return (
