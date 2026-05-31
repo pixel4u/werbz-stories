@@ -48,6 +48,27 @@ jobs:
             echo "==> install deps"
             pnpm install --frozen-lockfile
 
+            echo "==> guard next build lock"
+            # If another deploy/build is still running, wait briefly instead of racing.
+            # If no build process exists but a lock file remains, remove only the stale lock.
+            for i in $(seq 1 30); do
+              if pgrep -f "[n]ext build" >/dev/null 2>&1; then
+                echo "next build already running; waiting (attempt ${i}/30)..."
+                sleep 2
+              else
+                break
+              fi
+            done
+
+            if pgrep -f "[n]ext build" >/dev/null 2>&1; then
+              echo "ERROR: next build is still running after wait window."
+              pgrep -fa "[n]ext build" || true
+              exit 1
+            fi
+
+            # Next.js may leave stale lock files after interrupted builds.
+            rm -f .next/lock .next/build.lock .next/trace.lock || true
+
             echo "==> build"
             pnpm build
 
