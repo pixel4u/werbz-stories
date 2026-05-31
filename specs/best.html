@@ -451,7 +451,8 @@ function pairFacesIntoLeaves(faces){
 
 function getFaceAssetId(face){
   const c = face?.data || {};
-  if (face?.type === "cover-front") return c.coverAssetId || null;
+  // Both cover faces carry their image as coverAssetId (set in buildFaces).
+  if (face?.type === "cover-front" || face?.type === "cover-back") return c.coverAssetId || null;
   if (face?.type !== "content") return null;
   if (c.kind === "image") return c.assetId || c.src || null;
   if (c.kind === "video" || c.kind === "embed") return c.poster || null;
