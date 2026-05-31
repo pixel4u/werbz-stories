@@ -130,13 +130,15 @@ function TextFields({ storybookId, page, removeImageAction, isCover }: { storybo
         <option value="right">right</option>
       </select>
       <input name="background" defaultValue={page.content.background || ""} placeholder="Background hex (optional)" style={{ padding: "0.5rem" }} />
-      <ImageUploadForm storybookId={storybookId} pageId={page.id} currentAssetId={bgAssetId} target="text-background" />
+      {!isCover ? <ImageUploadForm storybookId={storybookId} pageId={page.id} currentAssetId={bgAssetId} target="text-background" /> : null}
       <input type="hidden" name="backgroundAssetId" defaultValue={bgAssetId} />
-      <select name="backgroundFit" defaultValue={page.content.backgroundFit || "cover"} style={{ padding: "0.5rem" }}>
-        <option value="cover">cover</option>
-        <option value="contain">contain</option>
-      </select>
-      {bgAssetId ? (
+      {!isCover ? (
+        <select name="backgroundFit" defaultValue={page.content.backgroundFit || "cover"} style={{ padding: "0.5rem" }}>
+          <option value="cover">cover</option>
+          <option value="contain">contain</option>
+        </select>
+      ) : null}
+      {bgAssetId && !isCover ? (
         <button type="submit" formAction={removeImageAction} formNoValidate style={{ padding: "0.45rem 0.7rem", border: "1px solid #ef4444", borderRadius: 8, background: "#fff", color: "#ef4444", cursor: "pointer" }}>
           Remove background image
         </button>
@@ -420,7 +422,6 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
                       </div>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 700 }}>{pageLabel(index, storybook.pages.length)}</div>
-                        <div style={{ fontSize: 12, color: "#64748b", textTransform: "capitalize" }}>{page.content.kind}</div>
                         <div style={{ fontSize: 11, color: "#94a3b8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{contentSummary(page.content)}</div>
                         {warn ? <div style={{ fontSize: 11, color: "#b45309" }}>{warn}</div> : null}
                       </div>
@@ -506,9 +507,6 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
             </div>
           </SectionCard>
 
-          <SectionCard title="Cover / End">
-            <CoverUploadForm storybookId={storybook.id} currentAssetId={storybook.coverAssetId || ""} />
-          </SectionCard>
         </section>
 
         <aside style={{ position: "sticky", top: 12 }}>
@@ -517,6 +515,9 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
               <>
                 <p style={{ margin: "0 0 0.55rem", color: "#475569", fontSize: 13 }}>
                   {pageLabel(effectiveSelectedIndex, storybook.pages.length)} • <code>{selectedPage.id}</code>
+                </p>
+                <p style={{ margin: "0 0 0.55rem", color: "#64748b", fontSize: 13 }}>
+                  {selectedIsCover ? "Editing Cover" : selectedIsEnd ? "Editing End Page" : "Editing Story Page"}
                 </p>
                 <form action={updatePageAction} style={{ display: "grid", gap: "0.55rem" }}>
                   <input type="hidden" name="storybookId" value={storybook.id} />
@@ -536,6 +537,7 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
                     </select>
                   )}
 
+                  {selectedIsCover ? <CoverUploadForm storybookId={storybook.id} currentAssetId={storybook.coverAssetId || ""} /> : null}
                   <TextFields storybookId={storybook.id} page={selectedPage} removeImageAction={removePageImageAction} isCover={selectedIsCover} />
                   <ImageFields storybookId={storybook.id} page={selectedPage} removeImageAction={removePageImageAction} />
                   <VideoFields page={selectedPage} />
