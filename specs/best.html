@@ -393,16 +393,42 @@ function pairFacesIntoLeaves(faces){
    CANVAS PAGE TEXTURES
    ============================================================ */
 
+function getFaceAssetId(face){
+  const c = face?.data || {};
+  if (face?.type !== "content") return null;
+  if (c.kind === "image") return c.assetId || c.src || null;
+  if (c.kind === "video" || c.kind === "embed") return c.poster || null;
+  if (c.kind === "text") return c.backgroundAssetId || null;
+  return null;
+}
+
 function textureForFace(face, side){
   const c = document.createElement("canvas");
   c.width = 900;
   c.height = 1278;
   const ctx = c.getContext("2d");
   drawFace(ctx,c.width,c.height,face,side);
-  return PIXI.Texture.from(c);
+  const texture = PIXI.Texture.from(c);
+
+  const assetId = getFaceAssetId(face);
+  if (assetId) {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      drawFace(ctx, c.width, c.height, face, side, img);
+      texture.update();
+    };
+    img.onerror = () => {
+      // Keep initial placeholder if image fails.
+      texture.update();
+    };
+    img.src = getAssetUrl(assetId);
+  }
+
+  return texture;
 }
 
-function drawFace(ctx,w,h,face,side){
+function drawFace(ctx,w,h,face,side,bgImage){
   ctx.clearRect(0,0,w,h);
 
   // The PixiJS mesh flips horizontally in screen space.
@@ -412,13 +438,13 @@ function drawFace(ctx,w,h,face,side){
     ctx.save();
     ctx.translate(w,0);
     ctx.scale(-1,1);
-    drawFaceContent(ctx,w,h,face,side);
+    drawFaceContent(ctx,w,h,face,side,bgImage);
     if (debug) drawDebugOverlayOnFace(ctx, w, h, face, side);
     ctx.restore();
     return;
   }
 
-  drawFaceContent(ctx,w,h,face,side);
+  drawFaceContent(ctx,w,h,face,side,bgImage);
   if (debug) drawDebugOverlayOnFace(ctx, w, h, face, side);
 }
 
@@ -448,7 +474,7 @@ function drawDebugOverlayOnFace(ctx, w, h, face, side){
   }
 }
 
-function drawFaceContent(ctx,w,h,face,side){
+function drawFaceContent(ctx,w,h,face,side,bgImage){
 
   if(face.type === "cover-front"){
     drawCover(ctx,w,h,face.data,false);
@@ -481,48 +507,72 @@ function drawFaceContent(ctx,w,h,face,side){
   }
 
   if(content.kind === "text"){
-    drawPaper(ctx,w,h,side);
-    drawTextPage(ctx,w,h,content,side);
+    drawTextPage(ctx,w,h,content,side,bgImage);
     return;
   }
 
   if(content.kind === "image"){
-    drawBackendMediaPage(ctx,w,h,content,"image");
+    drawBackendMediaPage(ctx,w,h,content,"image",bgImage);
     return;
   }
 
   if(content.kind === "video"){
-    drawBackendMediaPage(ctx,w,h,content,"video");
+    drawBackendMediaPage(ctx,w,h,content,"video",bgImage);
     return;
   }
 
   if(content.kind === "embed"){
-    drawBackendMediaPage(ctx,w,h,content,"embed");
+    drawBackendMediaPage(ctx,w,h,content,"embed",bgImage);
     return;
   }
 
   drawPaper(ctx,w,h,side);
 }
 
-function drawBackendMediaPage(ctx,w,h,content,kind){
+function fitImage(ctx,w,h,image,fit){
+  const sw = image.naturalWidth || image.width;
+  const sh = image.naturalHeight || image.height;
+  if (!sw || !sh) return;
+  const canvasRatio = w / h;
+  const imageRatio = sw / sh;
+  let dw = w;
+  let dh = h;
+  if (fit === "contain") {
+    if (imageRatio > canvasRatio) { dw = w; dh = w / imageRatio; }
+    else { dh = h; dw = h * imageRatio; }
+  } else {
+    if (imageRatio > canvasRatio) { dh = h; dw = h * imageRatio; }
+    else { dw = w; dh = w / imageRatio; }
+  }
+  ctx.drawImage(image, (w - dw) / 2, (h - dh) / 2, dw, dh);
+}
+
+function drawBackendMediaPage(ctx,w,h,content,kind,image){
   const assetHint =
     kind === "image" ? (content.assetId || content.src || "missing-asset-id")
     : (content.poster || "missing-poster");
 
-  drawPaper(ctx,w,h,"front");
-  ctx.fillStyle = "#ececec";
-  roundedRect(ctx, 52, 56, w - 104, h - 164, 20);
-  ctx.fill();
-  ctx.strokeStyle = "rgba(80,80,80,.22)";
-  ctx.lineWidth = 3;
-  ctx.stroke();
+  if (image) {
+    drawPaper(ctx,w,h,"front");
+    fitImage(ctx,w,h,image,content.fit || "cover");
+  } else {
+    drawPaper(ctx,w,h,"front");
+    ctx.fillStyle = "#ececec";
+    roundedRect(ctx, 52, 56, w - 104, h - 164, 20);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(80,80,80,.22)";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  }
 
-  ctx.fillStyle = "#2f2f2f";
-  ctx.font = "700 44px Georgia, serif";
-  ctx.textAlign = "left";
-  ctx.fillText(kind.toUpperCase(), 84, 126);
-  ctx.font = "500 24px system-ui, sans-serif";
-  wrapLines(ctx, `asset: ${assetHint}`, 84, 182, w - 168, 34, false);
+  if (!image || debug) {
+    ctx.fillStyle = image ? "rgba(15,15,15,.75)" : "#2f2f2f";
+    ctx.font = "700 44px Georgia, serif";
+    ctx.textAlign = "left";
+    ctx.fillText(kind.toUpperCase(), 84, 126);
+    ctx.font = "500 24px system-ui, sans-serif";
+    wrapLines(ctx, `asset: ${assetHint}`, 84, 182, w - 168, 34, false);
+  }
 
   if (content.caption) {
     ctx.fillStyle = "rgba(0,0,0,.62)";
@@ -667,23 +717,36 @@ function drawCover(ctx,w,h,data,isBack){
   }
 }
 
-function drawTextPage(ctx,w,h,c,side){
+function drawTextPage(ctx,w,h,c,side,bgImage){
+  const hasBgColor = typeof c.background === "string" && /^#([0-9a-fA-F]{6})$/.test(c.background);
+  if (bgImage) {
+    fitImage(ctx,w,h,bgImage,"cover");
+    const scrim = ctx.createLinearGradient(0,0,0,h);
+    scrim.addColorStop(0, "rgba(0,0,0,.42)");
+    scrim.addColorStop(1, "rgba(0,0,0,.28)");
+    ctx.fillStyle = scrim;
+    ctx.fillRect(0,0,w,h);
+  } else {
+    drawPaper(ctx,w,h,side,hasBgColor ? c.background : undefined);
+  }
+
   const left = side === "front" ? w*.16 : w*.12;
   const right = side === "front" ? w*.12 : w*.16;
   const maxW = w-left-right;
   let y = c.center ? h*.38 : h*.16;
 
   ctx.textAlign = c.center ? "center" : "left";
+  const textColor = (bgImage || hasBgColor) ? "#ffffff" : "#4d3e30";
 
   if(c.eyebrow){
-    ctx.fillStyle = "#a3917a";
+    ctx.fillStyle = (bgImage || hasBgColor) ? "rgba(255,255,255,.82)" : "#a3917a";
     ctx.font = "600 22px system-ui, sans-serif";
     ctx.fillText(c.eyebrow.toUpperCase(), c.center?w/2:left, y);
     y += 70;
   }
 
   ctx.font = "31px Georgia, serif";
-  ctx.fillStyle = "#4d3e30";
+  ctx.fillStyle = textColor;
 
   (c.body||[]).forEach((p,i)=>{
     if(c.dropcap && i===0 && !c.center){
