@@ -307,7 +307,7 @@ export async function addPage(
   storybookId: string,
   kind: "text" | "image" | "video" | "embed",
   side: PageSideType
-): Promise<void> {
+): Promise<string> {
   const db = getDb();
   const safeSide = PageSide.parse(side);
   const content = PageContent.parse(defaultContentForType(kind));
@@ -318,8 +318,9 @@ export async function addPage(
     .where(eq(pages.storybookId, storybookId));
   const nextPosition = Number(maxRows[0]?.max ?? -1) + 1;
 
+  const pageId = `page-${randomUUID()}`;
   await db.insert(pages).values({
-    id: `page-${randomUUID()}`,
+    id: pageId,
     storybookId,
     position: nextPosition,
     side: safeSide,
@@ -328,6 +329,7 @@ export async function addPage(
 
   await normalizePagePositions(storybookId);
   await db.update(storybooks).set({ updatedAt: new Date() }).where(eq(storybooks.id, storybookId));
+  return pageId;
 }
 
 export async function updatePage(input: {
@@ -369,6 +371,33 @@ export async function deletePage(pageId: string): Promise<void> {
   await db.delete(pages).where(eq(pages.id, pageId));
   await normalizePagePositions(row.storybookId);
   await db.update(storybooks).set({ updatedAt: new Date() }).where(eq(storybooks.id, row.storybookId));
+}
+
+export async function duplicatePage(pageId: string): Promise<string | null> {
+  const db = getDb();
+  const rows = await db.select().from(pages).where(eq(pages.id, pageId)).limit(1);
+  const source = rows[0];
+  if (!source) return null;
+
+  const insertedId = `page-${randomUUID()}`;
+  const insertPosition = source.position + 1;
+
+  await db
+    .update(pages)
+    .set({ position: sql`${pages.position} + 1` })
+    .where(and(eq(pages.storybookId, source.storybookId), sql`${pages.position} >= ${insertPosition}`));
+
+  await db.insert(pages).values({
+    id: insertedId,
+    storybookId: source.storybookId,
+    position: insertPosition,
+    side: source.side,
+    content: source.content,
+  });
+
+  await normalizePagePositions(source.storybookId);
+  await db.update(storybooks).set({ updatedAt: new Date() }).where(eq(storybooks.id, source.storybookId));
+  return insertedId;
 }
 
 export async function movePageUp(pageId: string): Promise<void> {

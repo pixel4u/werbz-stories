@@ -652,11 +652,33 @@ function drawEndpaper(ctx,w,h){
 function drawCover(ctx,w,h,data,isBack,bgImage){
   if (bgImage) {
     fitImage(ctx,w,h,bgImage,"cover");
-    const scrim = ctx.createLinearGradient(0,0,0,h);
-    scrim.addColorStop(0, "rgba(0,0,0,.45)");
-    scrim.addColorStop(1, "rgba(0,0,0,.5)");
-    ctx.fillStyle = scrim;
+    // Real-image cover mode:
+    //  - no decorative title/star overlays
+    //  - keep realistic book lighting with multiply + soft highlight
+    ctx.globalCompositeOperation = "multiply";
+    const shadow = ctx.createLinearGradient(0,0,w,0);
+    shadow.addColorStop(0, "rgba(8,12,22,.46)");
+    shadow.addColorStop(0.18, "rgba(8,12,22,.22)");
+    shadow.addColorStop(0.55, "rgba(8,12,22,.08)");
+    shadow.addColorStop(1, "rgba(8,12,22,.22)");
+    ctx.fillStyle = shadow;
     ctx.fillRect(0,0,w,h);
+
+    ctx.globalCompositeOperation = "screen";
+    const highlight = ctx.createRadialGradient(w * 0.35, h * 0.16, 30, w * 0.35, h * 0.16, h * 0.9);
+    highlight.addColorStop(0, "rgba(255,255,255,.15)");
+    highlight.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = highlight;
+    ctx.fillRect(0,0,w,h);
+
+    ctx.globalCompositeOperation = "source-over";
+
+    const spineShade = ctx.createLinearGradient(0, 0, w * 0.16, 0);
+    spineShade.addColorStop(0, "rgba(0,0,0,.38)");
+    spineShade.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = spineShade;
+    ctx.fillRect(0, 0, w * 0.16, h);
+    return;
   }
   const g = ctx.createRadialGradient(w*.28,h*.12,40,w*.5,h*.55,h*.8);
   g.addColorStop(0,"#2c3a66");
