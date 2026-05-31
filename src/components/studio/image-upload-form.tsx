@@ -10,6 +10,10 @@ interface ImageUploadFormProps {
   currentAssetId: string;
   // Which asset slot this upload writes to. Defaults to the image-page asset.
   target?: "page-image" | "text-background";
+  // Name of the hidden form input this upload should populate so a single
+  // "Save" commits the image together with the page's text. When set, the
+  // upload updates that field + preview in place instead of reloading.
+  fieldName?: string;
 }
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -30,7 +34,7 @@ function readImageDimensions(file: File): Promise<{ width?: number; height?: num
   });
 }
 
-export function ImageUploadForm({ storybookId, pageId, currentAssetId, target }: ImageUploadFormProps) {
+export function ImageUploadForm({ storybookId, pageId, currentAssetId, target, fieldName }: ImageUploadFormProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadedAssetId, setUploadedAssetId] = useState<string | null>(null);
@@ -74,7 +78,17 @@ export function ImageUploadForm({ storybookId, pageId, currentAssetId, target }:
       }
 
       setUploadedAssetId(payload.assetId);
-      window.location.reload();
+      // Populate the matching hidden form field so the single Save commits this
+      // image with the page's text. Update the preview in place (no reload) so
+      // typed-but-unsaved text is never lost.
+      if (fieldName) {
+        const input = document.querySelector<HTMLInputElement>(`input[name="${fieldName}"]`);
+        if (input) input.value = payload.assetId;
+      } else {
+        // No bound field (legacy callers): fall back to a refresh so the saved
+        // image is reflected.
+        window.location.reload();
+      }
     } catch (uploadError) {
       const message = uploadError instanceof Error ? uploadError.message : "Upload failed";
       setError(message);

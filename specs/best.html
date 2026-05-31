@@ -402,12 +402,15 @@ function buildFaces(sb){
   });
 
   pages.forEach((p, i) => {
-    const coverAssetId = p.content?.assetId || p.content?.backgroundAssetId || p.content?.src || null;
+    // The cover image can come from either the dedicated cover upload
+    // (storybook coverAssetId, surfaced as sb.cover.coverAssetId) or the page's
+    // own image/background. Prefer the storybook cover asset, then the page's.
+    const pageAsset = p.content?.assetId || p.content?.backgroundAssetId || p.content?.src || null;
     if (i === 0) {
-      // Front cover: render the real first page's image on the hardback cover.
+      const coverAssetId = (sb.cover && sb.cover.coverAssetId) || pageAsset || null;
       faces.push({ type: "cover-front", data: { ...sb.cover, coverAssetId } });
     } else if (i === lastIndex && lastIndex > 0) {
-      // Back cover: the canonical end page.
+      const coverAssetId = pageAsset || (sb.cover && sb.cover.coverAssetId) || null;
       faces.push({ type: "cover-back", data: { ...sb.back, coverAssetId } });
     } else {
       faces.push(contentFace(p));

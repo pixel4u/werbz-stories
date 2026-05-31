@@ -39,7 +39,9 @@ function renderPlaceholder() {
   return new NextResponse(svg, {
     headers: {
       "content-type": "image/svg+xml; charset=utf-8",
-      "cache-control": "public, max-age=3600",
+      // The placeholder is a fallback for a missing asset — never cache it, so
+      // a real image shows as soon as it is uploaded for that page.
+      "cache-control": "no-store",
     },
   });
 }

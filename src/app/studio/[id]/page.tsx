@@ -25,7 +25,7 @@ import { getAssetUrl } from "@/lib/assets";
 
 interface Props {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ page?: string; mode?: string; reorder?: string; upload?: string; published?: string }>;
+  searchParams: Promise<{ page?: string; mode?: string; reorder?: string; upload?: string; published?: string; saved?: string }>;
 }
 
 function parseBoolean(value: FormDataEntryValue | null, fallback: boolean): boolean {
@@ -202,7 +202,7 @@ function TextEditorFields({
         <CoverUploadForm storybookId={storybookId} currentAssetId={coverAssetId || ""} />
       ) : (
         <>
-          <ImageUploadForm storybookId={storybookId} pageId={page.id} currentAssetId={bgAssetId} target="text-background" />
+          <ImageUploadForm storybookId={storybookId} pageId={page.id} currentAssetId={bgAssetId} target="text-background" fieldName="backgroundAssetId" />
           <select name="backgroundFit" defaultValue={page.content.backgroundFit || "cover"} style={{ padding: "0.6rem", borderRadius: 8, border: "1px solid #d6dce5" }}>
             <option value="cover">cover</option>
             <option value="contain">contain</option>
@@ -224,10 +224,12 @@ function ImageEditorFields({ storybookId, page, removeImageAction }: { storybook
   return (
     <>
       <h4 style={{ margin: "0.45rem 0 0", fontSize: 13, color: "#475569" }}>Page Image</h4>
-      <ImageUploadForm storybookId={storybookId} pageId={page.id} currentAssetId={page.content.assetId} target="page-image" />
+      <ImageUploadForm storybookId={storybookId} pageId={page.id} currentAssetId={page.content.assetId} target="page-image" fieldName="assetId" />
+      {/* The asset id is committed by the single Save; the upload fills this in. */}
+      <input type="hidden" name="assetId" defaultValue={page.content.assetId} />
       <select name="fit" defaultValue={page.content.fit || "cover"} style={{ padding: "0.6rem", borderRadius: 8, border: "1px solid #d6dce5" }}>
-        <option value="cover">cover</option>
-        <option value="contain">contain</option>
+        <option value="cover">cover (fill)</option>
+        <option value="contain">contain (fit)</option>
       </select>
       <input name="caption" defaultValue={page.content.caption || ""} placeholder="Caption" style={{ padding: "0.6rem", borderRadius: 8, border: "1px solid #d6dce5" }} />
       {page.content.assetId ? (
@@ -235,10 +237,6 @@ function ImageEditorFields({ storybookId, page, removeImageAction }: { storybook
           Remove image
         </button>
       ) : null}
-      <details>
-        <summary style={{ cursor: "pointer", color: "#64748b" }}>Advanced</summary>
-        <input name="assetId" defaultValue={page.content.assetId} placeholder="assetId" style={{ marginTop: "0.5rem", width: "100%", padding: "0.55rem", borderRadius: 8, border: "1px dashed #cbd5e1" }} />
-      </details>
     </>
   );
 }
@@ -298,7 +296,7 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
     revalidatePath(`/studio/${storybookId}`);
     revalidatePath("/studio");
     revalidatePath(`/api/storybooks`);
-    redirect(`/studio/${storybookId}?mode=edit&page=${encodeURIComponent(pageId)}`);
+    redirect(`/studio/${storybookId}?page=${encodeURIComponent(pageId)}`);
   }
 
   async function updatePageAction(formData: FormData) {
@@ -350,7 +348,7 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
     revalidatePath(`/studio/${storybookId}`);
     revalidatePath("/studio");
     revalidatePath(`/api/storybooks`);
-    redirect(`/studio/${storybookId}?mode=edit&page=${encodeURIComponent(pageId)}`);
+    redirect(`/studio/${storybookId}?page=${encodeURIComponent(pageId)}&saved=1`);
   }
 
   async function deletePageAction(formData: FormData) {
@@ -372,7 +370,7 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
     revalidatePath(`/studio/${storybookId}`);
     revalidatePath("/studio");
     revalidatePath(`/api/storybooks`);
-    if (duplicatedId) redirect(`/studio/${storybookId}?mode=edit&page=${encodeURIComponent(duplicatedId)}`);
+    if (duplicatedId) redirect(`/studio/${storybookId}?page=${encodeURIComponent(duplicatedId)}`);
     redirect(`/studio/${storybookId}`);
   }
 
@@ -384,7 +382,7 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
     revalidatePath(`/studio/${storybookId}`);
     revalidatePath("/studio");
     revalidatePath(`/api/storybooks`);
-    redirect(`/studio/${storybookId}?mode=edit&page=${encodeURIComponent(pageId)}`);
+    redirect(`/studio/${storybookId}?page=${encodeURIComponent(pageId)}`);
   }
 
   async function moveUpAction(formData: FormData) {
@@ -395,7 +393,7 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
     revalidatePath(`/studio/${storybookId}`);
     revalidatePath("/studio");
     revalidatePath(`/api/storybooks`);
-    redirect(`/studio/${storybookId}?mode=edit&page=${encodeURIComponent(pageId)}`);
+    redirect(`/studio/${storybookId}?page=${encodeURIComponent(pageId)}`);
   }
 
   async function moveDownAction(formData: FormData) {
@@ -406,7 +404,7 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
     revalidatePath(`/studio/${storybookId}`);
     revalidatePath("/studio");
     revalidatePath(`/api/storybooks`);
-    redirect(`/studio/${storybookId}?mode=edit&page=${encodeURIComponent(pageId)}`);
+    redirect(`/studio/${storybookId}?page=${encodeURIComponent(pageId)}`);
   }
 
   async function togglePublishAction(formData: FormData) {
@@ -449,6 +447,7 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
   const publicLink = `https://werbz.com/${storybook.slug}`;
   const nextStatus = storybook.status === "published" ? "draft" : "published";
   const justPublished = query.published === "1" && storybook.status === "published";
+  const justSaved = query.saved === "1";
 
   // Center preview: cover and end are single pages; a story page shows the open
   // spread it belongs to. Middle pages are indices 1..total-2, paired (1,2),(3,4)...
@@ -595,8 +594,11 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
           <aside style={{ border: "1px solid #e5e7eb", borderRadius: 14, background: "#fff", padding: "0.9rem", position: "sticky", top: "1rem" }}>
             {selectedPage ? (
               <>
-                <h2 style={{ margin: "0 0 0.2rem", fontSize: 18 }}>{selectedIsCover ? "Editing Cover" : selectedIsEnd ? "Editing End" : `Editing ${pageLabel(effectiveSelectedIndex, total)}`}</h2>
-                <p style={{ margin: "0 0 0.8rem", color: "#64748b", fontSize: 13 }}>{summaryText(selectedPage)}</p>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <h2 style={{ margin: "0 0 0.2rem", fontSize: 18 }}>{selectedIsCover ? "Editing Cover" : selectedIsEnd ? "Editing End" : `Editing ${pageLabel(effectiveSelectedIndex, total)}`}</h2>
+                  {justSaved ? <span style={{ fontSize: 12, color: "#059669", fontWeight: 700 }}>Saved ✓</span> : null}
+                </div>
+                <p style={{ margin: "0 0 0.8rem", color: "#64748b", fontSize: 13 }}>One Save commits this page&apos;s text and image together.</p>
                 <form action={updatePageAction} style={{ display: "grid", gap: "0.6rem" }}>
                   <input type="hidden" name="storybookId" value={storybook.id} />
                   <input type="hidden" name="pageId" value={selectedPage.id} />
@@ -606,7 +608,7 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
                   <ImageEditorFields storybookId={storybook.id} page={selectedPage} removeImageAction={removePageImageAction} />
                   <VideoEditorFields page={selectedPage} />
                   <EmbedEditorFields page={selectedPage} />
-                  <button type="submit" style={{ marginTop: "0.3rem", padding: "0.7rem", borderRadius: 9, border: "1px solid #2563eb", background: "#2563eb", color: "#fff", cursor: "pointer", fontWeight: 700 }}>Save Page</button>
+                  <button type="submit" style={{ marginTop: "0.3rem", padding: "0.8rem", borderRadius: 9, border: "1px solid #2563eb", background: "#2563eb", color: "#fff", cursor: "pointer", fontWeight: 700, fontSize: 15 }}>Save</button>
                 </form>
                 <div style={{ borderTop: "1px solid #e5e7eb", marginTop: "0.85rem", paddingTop: "0.75rem", display: "grid", gap: "0.5rem" }}>
                   <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>Page Actions</div>

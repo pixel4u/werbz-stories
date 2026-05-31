@@ -69,8 +69,9 @@ export function CoverUploadForm({ storybookId, currentAssetId }: CoverUploadForm
         throw new Error(payload.error || "Upload failed");
       }
 
+      // The cover asset is saved to the storybook on upload; show the new
+      // preview in place (no reload) so any unsaved cover title text is kept.
       setUploadedAssetId(payload.assetId);
-      window.location.reload();
     } catch (uploadError) {
       const message = uploadError instanceof Error ? uploadError.message : "Upload failed";
       setError(message);
