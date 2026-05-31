@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored third-party runtime used by the reader engine.
+    "public/pixi-7.4.3.min.js",
   ]),
 ]);
 
