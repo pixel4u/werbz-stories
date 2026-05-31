@@ -1,0 +1,1908 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>PixiJS Storybook Page Curl Mesh</title>
+<script src="https://cdn.jsdelivr.net/npm/pixi.js@7.4.3/dist/pixi.min.js"></script>
+<style>
+  :root{
+    --bg1:#172022;
+    --bg2:#080c0e;
+    --gold:#e6c87a;
+    --paper:#f5ebd6;
+    --ink:#43362a;
+    --serif:Georgia,"Iowan Old Style","Palatino Linotype",serif;
+    --ui:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{
+    margin:0;
+    width:100%;
+    height:100%;
+    overflow:hidden;
+    background:
+      radial-gradient(120% 90% at 50% 35%, rgba(255,224,176,.16), transparent 46%),
+      radial-gradient(140% 120% at 50% 18%, #233032 0%, var(--bg1) 38%, var(--bg2) 100%);
+    color:#f4ead9;
+    font-family:var(--ui);
+    user-select:none;
+    -webkit-user-select:none;
+    touch-action:none;
+  }
+  body::after{
+    content:"";
+    position:fixed;
+    inset:0;
+    pointer-events:none;
+    opacity:.05;
+    mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  #app{
+    width:100vw;
+    height:100vh;
+    overflow:hidden;
+  }
+  .title-tag{
+    position:fixed;
+    top:22px;
+    left:50%;
+    transform:translateX(-50%);
+    font-family:var(--serif);
+    font-style:italic;
+    font-size:14px;
+    letter-spacing:.04em;
+    color:rgba(244,234,217,.60);
+    opacity:0;
+    transition:opacity .3s ease;
+    pointer-events:none;
+    z-index:10;
+  }
+  .title-tag.show{opacity:1}
+  .hint{
+    position:fixed;
+    left:50%;
+    bottom:68px;
+    transform:translateX(-50%);
+    z-index:10;
+    pointer-events:none;
+    font-size:12px;
+    letter-spacing:.22em;
+    text-transform:uppercase;
+    color:rgba(244,234,217,.75);
+    transition:opacity .3s ease;
+    text-align:center;
+  }
+  .hint.hide{opacity:0}
+  .ui{
+    position:fixed;
+    left:0;
+    right:0;
+    bottom:max(14px, env(safe-area-inset-bottom));
+    z-index:10;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    gap:22px;
+  }
+  button.nav{
+    width:46px;
+    height:46px;
+    border-radius:50%;
+    border:1px solid rgba(255,255,255,.16);
+    background:rgba(255,255,255,.06);
+    color:#f4ead9;
+    cursor:pointer;
+    display:grid;
+    place-items:center;
+    backdrop-filter:blur(8px);
+    transition:.2s ease;
+  }
+  button.nav:hover{background:rgba(255,255,255,.14);transform:translateY(-1px)}
+  button.nav:disabled{opacity:.28;cursor:default;transform:none}
+  button.nav svg{
+    width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;
+    stroke-linecap:round;stroke-linejoin:round;
+  }
+  .dots{display:flex;align-items:center;gap:8px}
+  .dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.23);transition:.25s ease}
+  .dot.on{background:var(--gold);box-shadow:0 0 10px var(--gold);transform:scale(1.28)}
+  .dbg{
+    position:fixed;
+    top:10px;
+    left:10px;
+    z-index:50;
+    display:none;
+    background:rgba(0,0,0,.62);
+    color:#9ff;
+    white-space:pre;
+    font:11px ui-monospace,Menlo,Consolas,monospace;
+    padding:8px 10px;
+    border-radius:6px;
+  }
+  body.debug .dbg{display:block}
+
+  @media (max-width: 520px){
+    .ui{
+      bottom:max(14px, env(safe-area-inset-bottom));
+      gap:14px;
+    }
+    button.nav{
+      width:42px;
+      height:42px;
+    }
+    .hint{
+      bottom:72px;
+      font-size:10px;
+      letter-spacing:.18em;
+    }
+    .title-tag{
+      top:14px;
+      max-width:80vw;
+      text-align:center;
+      font-size:12px;
+    }
+  }
+
+  @media (max-height: 600px){
+    .ui{
+      bottom:max(10px, env(safe-area-inset-bottom));
+    }
+    .hint{
+      display:none;
+    }
+    .title-tag{
+      top:10px;
+      font-size:12px;
+    }
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div class="title-tag" id="titleTag">The Lantern of the Quiet Wood</div>
+<div class="hint" id="hint">Drag the page edge or use arrows</div>
+
+<div class="ui">
+  <button class="nav" id="prevBtn" aria-label="Previous page">
+    <svg viewBox="0 0 24 24"><polyline points="15 5 8 12 15 19"/></svg>
+  </button>
+  <div class="dots" id="dots"></div>
+  <button class="nav" id="nextBtn" aria-label="Next page">
+    <svg viewBox="0 0 24 24"><polyline points="9 5 16 12 9 19"/></svg>
+  </button>
+</div>
+
+<div class="dbg" id="dbg"></div>
+
+<script>
+/* ============================================================
+   PIXIJS STORYBOOK PAGE CURL
+   Save as: storybook-pixijs-page-curl.html
+
+   Core idea:
+   - This is not CSS 3D.
+   - Each page face is drawn into a canvas texture.
+   - Each page is displayed as a subdivided PixiJS mesh.
+   - During flip/drag, the mesh vertices are updated every frame.
+   - This is a front-view 2.5D WebGL illusion, not true 3D.
+   ============================================================ */
+
+/* ============================================================
+   DATA MODEL
+   Same mock Storybook structure as your original prototype:
+   id, slug, title, summary, cover, theme, pages[]
+   Page content kinds: text, image, video, embed
+   ============================================================ */
+
+let STORYBOOK = {
+  id:"sb_001",
+  slug:"the-lantern-of-the-quiet-wood",
+  title:"The Lantern of the Quiet Wood",
+  summary:"A small light, a long night, and the friends it gathers along the way.",
+  author:"Marigold Fenn",
+  theme:{ accent:"#e6c87a" },
+  cover:{ kicker:"A Bedtime Tale", title:"The Lantern\nof the Quiet Wood", author:"Marigold Fenn" },
+  pages:[
+    { id:"p1", position:1, side:"right", content:{ kind:"text", eyebrow:"One",
+      body:["Long ago, at the soft edge of the world, there was a wood so quiet you could hear the stars breathing. In it lived a girl named Wren, and a lantern that would not go out."], dropcap:true } },
+
+    { id:"p2", position:2, side:"left", content:{ kind:"image", src:"lantern",
+      caption:"The lantern that would not go out." } },
+    { id:"p3", position:2, side:"right", content:{ kind:"text",
+      body:["Every evening Wren carried it to the doorway and let it glow, so that anything lost in the dark might find its way home.",
+            "One night, something did."] } },
+
+    { id:"p4", position:3, side:"left", content:{ kind:"image", src:"forest",
+      caption:"Into the hush of the trees." } },
+    { id:"p5", position:3, side:"right", content:{ kind:"text",
+      body:["A small fox stood at the treeline, shivering. “I have walked all night,” it said, “and I cannot remember the way.”",
+            "“Then walk with me,” said Wren, and lifted the lantern higher."] } },
+
+    { id:"p6", position:4, side:"left", content:{ kind:"image", src:"river",
+      caption:"Where the river kept the moon." } },
+    { id:"p7", position:4, side:"right", content:{ kind:"text",
+      body:["They came to a river that held the whole moon in its hands. One by one the lost things gathered to the light — a heron, a hare, a sleepy little bear.",
+            "And the lantern, strange to say, only burned the brighter for the sharing."] } },
+
+    { id:"p8", position:5, side:"left", content:{ kind:"video", poster:"forest",
+      caption:"Video poster only — no player in this WebGL prototype." } },
+    { id:"p9", position:5, side:"right", content:{ kind:"embed", poster:"river", label:"Embed",
+      caption:"Embed poster only." } },
+
+    { id:"p10", position:6, side:"left", content:{ kind:"text", center:true,
+      body:["By morning the wood was not so quiet anymore.","It was full of friends who had found their way."] } },
+    { id:"p11", position:6, side:"right", content:{ kind:"text", center:true, end:true,
+      body:["And the little light went on glowing,","for anyone still looking for home."],
+      tail:"The End" } },
+  ],
+  back:{ line:"Sleep softly. The light is still on.", author:"Marigold Fenn" },
+};
+
+const DEFAULT_STORYBOOK = STORYBOOK;
+const search = new URLSearchParams(location.search);
+const debug = search.get("debug") === "1";
+const storySlug = search.get("slug") || location.pathname.split("/").filter(Boolean).pop() || "the-lighthouse";
+if(debug) document.body.classList.add("debug");
+
+function getAssetUrl(assetId){
+  return "/api/assets/" + encodeURIComponent(assetId);
+}
+
+function normalizeStorybookFromApi(payload){
+  const sb = payload?.storybook || payload || {};
+  const pages = Array.isArray(sb.pages) ? sb.pages : [];
+  return {
+    id: sb.id || DEFAULT_STORYBOOK.id,
+    slug: sb.slug || storySlug,
+    title: sb.title || DEFAULT_STORYBOOK.title,
+    summary: sb.summary || "",
+    author: DEFAULT_STORYBOOK.author,
+    theme: sb.theme || DEFAULT_STORYBOOK.theme,
+    cover: {
+      kicker: "Stories",
+      title: sb.title || DEFAULT_STORYBOOK.cover.title,
+      author: DEFAULT_STORYBOOK.cover.author,
+    },
+    pages: pages.map((p, i) => {
+      const c = p.content || {};
+      return {
+        id: p.id || `p${i+1}`,
+        position: typeof p.position === "number" ? p.position : i,
+        side: p.side || (i % 2 ? "right" : "left"),
+        content: {
+          kind: c.kind || "text",
+          eyebrow: c.eyebrow || "",
+          title: c.title || "",
+          body: Array.isArray(c.body) ? c.body : (c.body ? [String(c.body)] : []),
+          align: c.align || (c.center ? "center" : "left"),
+          src: c.src || c.assetId || null,
+          assetId: c.assetId || null,
+          poster: c.poster || null,
+          caption: c.caption || "",
+          label: c.label || (c.kind === "embed" ? "Embed" : ""),
+          source: c.source || null,
+          background: c.background || null,
+        }
+      };
+    }),
+    back: {
+      line: "Thanks for reading.",
+      author: DEFAULT_STORYBOOK.back.author,
+    },
+  };
+}
+
+/* ============================================================
+   PIXI APP
+   ============================================================ */
+
+const app = new PIXI.Application({
+  resizeTo: window,
+  antialias:true,
+  autoDensity:true,
+  resolution: Math.min(window.devicePixelRatio || 1, 2),
+  backgroundAlpha:0,
+});
+
+document.getElementById("app").appendChild(app.view);
+app.view.style.width = "100vw";
+app.view.style.height = "100vh";
+
+PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.LINEAR;
+
+const root = new PIXI.Container();
+app.stage.addChild(root);
+
+const floorLayer = new PIXI.Container();
+const stackLayer = new PIXI.Container();
+const activeLayer = new PIXI.Container();
+const chromeLayer = new PIXI.Container();
+
+root.addChild(floorLayer, stackLayer, activeLayer, chromeLayer);
+
+/* ============================================================
+   SIZING
+   ============================================================ */
+
+let PAGE_W = 360;
+let PAGE_H = 510;
+let SPINE_X = 0;
+let BOOK_Y = 0;
+let pageScale = 1;
+
+const SEG_X = 42;
+const SEG_Y = 8;
+const STACK_GAP = 1.35;
+
+let leaves = [];
+let flipped = 0;
+let active = null;
+let drag = null;
+let hasInteracted = false;
+
+/* ============================================================
+   BUILD FACES / LEAVES
+   ============================================================ */
+
+function buildFaces(sb){
+  const faces = [];
+  faces.push({ type:"cover-front", data:sb.cover });
+  faces.push({ type:"endpaper" });
+
+  if(sb.pages.length % 2 !== 0){
+    faces.push({ type:"halftitle", data:sb });
+  }
+
+  sb.pages.forEach(p => faces.push({
+    type:"content",
+    data:p.content,
+    pid:p.id,
+    meta:{
+      id:p.id,
+      position:p.position,
+      side:p.side,
+      kind:p.content?.kind || "text",
+      assetId:p.content?.assetId || null,
+      poster:p.content?.poster || null,
+    }
+  }));
+
+  faces.push({ type:"endpaper" });
+  faces.push({ type:"cover-back", data:sb.back });
+  return faces;
+}
+
+function pairFacesIntoLeaves(faces){
+  const out = [];
+  for(let i=0; i<faces.length; i+=2){
+    out.push({
+      index:i/2,
+      front:faces[i],
+      back:faces[i+1],
+      isFrontCover:i===0,
+      isBackCover:i >= faces.length-2
+    });
+  }
+  return out;
+}
+
+/* ============================================================
+   CANVAS PAGE TEXTURES
+   ============================================================ */
+
+function textureForFace(face, side){
+  const c = document.createElement("canvas");
+  c.width = 900;
+  c.height = 1278;
+  const ctx = c.getContext("2d");
+  drawFace(ctx,c.width,c.height,face,side);
+  return PIXI.Texture.from(c);
+}
+
+function drawFace(ctx,w,h,face,side){
+  ctx.clearRect(0,0,w,h);
+
+  // The PixiJS mesh flips horizontally in screen space.
+  // Back-side textures must be pre-flipped on the canvas so the final result
+  // is readable to the viewer, not mirrored/inverted.
+  if(side === "back"){
+    ctx.save();
+    ctx.translate(w,0);
+    ctx.scale(-1,1);
+    drawFaceContent(ctx,w,h,face,side);
+    if (debug) drawDebugOverlayOnFace(ctx, w, h, face, side);
+    ctx.restore();
+    return;
+  }
+
+  drawFaceContent(ctx,w,h,face,side);
+  if (debug) drawDebugOverlayOnFace(ctx, w, h, face, side);
+}
+
+function drawDebugOverlayOnFace(ctx, w, h, face, side){
+  const meta = face?.meta || {};
+  const lines = [
+    "DEBUG",
+    `faceType: ${face?.type || "n/a"}`,
+    `pageId: ${meta.id || face?.pid || "n/a"}`,
+    `position: ${meta.position ?? "n/a"}`,
+    `side: ${meta.side || side || "n/a"}`,
+    `kind: ${meta.kind || face?.data?.kind || "n/a"}`,
+    `assetId: ${meta.assetId || face?.data?.assetId || "n/a"}`,
+    `poster: ${meta.poster || face?.data?.poster || "n/a"}`,
+  ];
+
+  ctx.fillStyle = "rgba(0,0,0,.65)";
+  roundedRect(ctx, 36, h - 300, w - 72, 252, 14);
+  ctx.fill();
+  ctx.fillStyle = "#e9f9ff";
+  ctx.textAlign = "left";
+  ctx.font = "600 22px ui-monospace, Menlo, monospace";
+  let y = h - 258;
+  for (const line of lines) {
+    ctx.fillText(line, 58, y);
+    y += 28;
+  }
+}
+
+function drawFaceContent(ctx,w,h,face,side){
+
+  if(face.type === "cover-front"){
+    drawCover(ctx,w,h,face.data,false);
+    return;
+  }
+  if(face.type === "cover-back"){
+    drawCover(ctx,w,h,face.data,true);
+    return;
+  }
+  if(face.type === "endpaper"){
+    drawEndpaper(ctx,w,h);
+    return;
+  }
+  if(face.type === "halftitle"){
+    drawEndpaper(ctx,w,h);
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#43362a";
+    ctx.font = "500 48px Georgia, serif";
+    wrapLines(ctx, STORYBOOK.title, w*.5, h*.43, w*.70, 56, true);
+    ctx.fillStyle = "#7a6650";
+    ctx.font = "italic 28px Georgia, serif";
+    ctx.fillText(STORYBOOK.author, w*.5, h*.58);
+    return;
+  }
+
+  const content = face.data;
+  if(!content){
+    drawPaper(ctx,w,h,side);
+    return;
+  }
+
+  if(content.kind === "text"){
+    drawPaper(ctx,w,h,side);
+    drawTextPage(ctx,w,h,content,side);
+    return;
+  }
+
+  if(content.kind === "image"){
+    drawBackendMediaPage(ctx,w,h,content,"image");
+    return;
+  }
+
+  if(content.kind === "video"){
+    drawBackendMediaPage(ctx,w,h,content,"video");
+    return;
+  }
+
+  if(content.kind === "embed"){
+    drawBackendMediaPage(ctx,w,h,content,"embed");
+    return;
+  }
+
+  drawPaper(ctx,w,h,side);
+}
+
+function drawBackendMediaPage(ctx,w,h,content,kind){
+  const assetHint =
+    kind === "image" ? (content.assetId || content.src || "missing-asset-id")
+    : (content.poster || "missing-poster");
+
+  drawPaper(ctx,w,h,"front");
+  ctx.fillStyle = "#ececec";
+  roundedRect(ctx, 52, 56, w - 104, h - 164, 20);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(80,80,80,.22)";
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  ctx.fillStyle = "#2f2f2f";
+  ctx.font = "700 44px Georgia, serif";
+  ctx.textAlign = "left";
+  ctx.fillText(kind.toUpperCase(), 84, 126);
+  ctx.font = "500 24px system-ui, sans-serif";
+  wrapLines(ctx, `asset: ${assetHint}`, 84, 182, w - 168, 34, false);
+
+  if (content.caption) {
+    ctx.fillStyle = "rgba(0,0,0,.62)";
+    roundedRect(ctx, 56, h - 132, w - 112, 68, 14);
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.font = "500 28px system-ui, sans-serif";
+    ctx.fillText(content.caption, 84, h - 88);
+  }
+}
+
+function drawPaper(ctx,w,h,side){
+  const g = ctx.createLinearGradient(0,0,w,h);
+  g.addColorStop(0,"#f7edd7");
+  g.addColorStop(1,"#eadbbd");
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,w,h);
+
+  // Paper fibers
+  ctx.globalAlpha = 0.045;
+  for(let i=0;i<1400;i++){
+    const x = pseudo(i*11.17)*w;
+    const y = pseudo(i*27.31)*h;
+    const l = pseudo(i*8.7)*18+3;
+    ctx.strokeStyle = pseudo(i*4.2)>.5 ? "#6c5435" : "#fff6df";
+    ctx.beginPath();
+    ctx.moveTo(x,y);
+    ctx.lineTo(x+l,y+pseudo(i*3.1)*2-1);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // Gutter shadow
+  const x0 = side === "front" ? 0 : w;
+  const x1 = side === "front" ? w*.28 : w*.72;
+  const gutter = ctx.createLinearGradient(x0,0,x1,0);
+  gutter.addColorStop(0,"rgba(70,45,15,.22)");
+  gutter.addColorStop(1,"rgba(70,45,15,0)");
+  ctx.fillStyle = gutter;
+  ctx.fillRect(0,0,w,h);
+
+  ctx.strokeStyle = "rgba(120,92,52,.18)";
+  ctx.lineWidth = 7;
+  ctx.strokeRect(10,10,w-20,h-20);
+}
+
+function drawEndpaper(ctx,w,h){
+  const g = ctx.createRadialGradient(w/2,h*.35,20,w/2,h*.50,h*.75);
+  g.addColorStop(0,"#efe3c6");
+  g.addColorStop(.72,"#e3d2ab");
+  g.addColorStop(1,"#d8c69e");
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,w,h);
+
+  ctx.save();
+  ctx.translate(w/2,h/2);
+  ctx.strokeStyle = "rgba(139,103,44,.35)";
+  ctx.fillStyle = "rgba(139,103,44,.23)";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(0,0,120,0,Math.PI*2);
+  ctx.stroke();
+  starPath(ctx,0,0,150,42,8);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawCover(ctx,w,h,data,isBack){
+  const g = ctx.createRadialGradient(w*.28,h*.12,40,w*.5,h*.55,h*.8);
+  g.addColorStop(0,"#2c3a66");
+  g.addColorStop(.33,"#243056");
+  g.addColorStop(.80,"#161d3a");
+  g.addColorStop(1,"#0d1226");
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,w,h);
+
+  // Cloth grain
+  ctx.globalAlpha = .10;
+  ctx.strokeStyle = "#ffffff";
+  for(let y=0;y<h;y+=8){
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y+Math.sin(y)*2); ctx.stroke();
+  }
+  for(let x=0;x<w;x+=10){
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x+Math.cos(x)*2,h); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  const bandX = isBack ? w*.90 : 0;
+  const bandG = ctx.createLinearGradient(bandX,0,bandX+w*.08,0);
+  bandG.addColorStop(0,"rgba(0,0,0,.48)");
+  bandG.addColorStop(.7,"rgba(255,255,255,.08)");
+  bandG.addColorStop(1,"rgba(0,0,0,.22)");
+  ctx.fillStyle = bandG;
+  ctx.fillRect(bandX,0,w*.10,h);
+
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#e6c87a";
+  ctx.strokeStyle = "rgba(230,200,122,.8)";
+  ctx.lineWidth = 2;
+
+  ctx.save();
+  ctx.translate(w/2,h*.25);
+  starPath(ctx,0,0,72,20,8);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(0,0,112,0,Math.PI*2);
+  ctx.stroke();
+  ctx.restore();
+
+  if(!isBack){
+    ctx.font = "600 24px system-ui, sans-serif";
+    ctx.fillText((data.kicker||"").toUpperCase(), w/2, h*.36);
+
+    ctx.font = "600 74px Georgia, serif";
+    ctx.fillStyle = "#f1dca2";
+    const lines = (data.title||"").split("\n");
+    lines.forEach((line,i)=>ctx.fillText(line, w/2, h*.47 + i*82));
+
+    ctx.strokeStyle = "#b78c3c";
+    ctx.beginPath();
+    ctx.moveTo(w*.30,h*.67);
+    ctx.lineTo(w*.70,h*.67);
+    ctx.stroke();
+
+    ctx.fillStyle = "#cdd6ee";
+    ctx.font = "600 26px system-ui, sans-serif";
+    ctx.fillText((data.author||"").toUpperCase(), w/2, h*.75);
+  }else{
+    ctx.fillStyle = "#f1dca2";
+    ctx.font = "italic 34px Georgia, serif";
+    wrapLines(ctx, data.line || "", w*.5, h*.47, w*.70, 44, true);
+
+    ctx.strokeStyle = "#b78c3c";
+    ctx.beginPath();
+    ctx.moveTo(w*.32,h*.62);
+    ctx.lineTo(w*.68,h*.62);
+    ctx.stroke();
+
+    ctx.fillStyle = "#cdd6ee";
+    ctx.font = "600 25px system-ui, sans-serif";
+    ctx.fillText((data.author||"").toUpperCase(), w/2, h*.70);
+  }
+}
+
+function drawTextPage(ctx,w,h,c,side){
+  const left = side === "front" ? w*.16 : w*.12;
+  const right = side === "front" ? w*.12 : w*.16;
+  const maxW = w-left-right;
+  let y = c.center ? h*.38 : h*.16;
+
+  ctx.textAlign = c.center ? "center" : "left";
+
+  if(c.eyebrow){
+    ctx.fillStyle = "#a3917a";
+    ctx.font = "600 22px system-ui, sans-serif";
+    ctx.fillText(c.eyebrow.toUpperCase(), c.center?w/2:left, y);
+    y += 70;
+  }
+
+  ctx.font = "31px Georgia, serif";
+  ctx.fillStyle = "#4d3e30";
+
+  (c.body||[]).forEach((p,i)=>{
+    if(c.dropcap && i===0 && !c.center){
+      ctx.save();
+      ctx.font = "700 92px Georgia, serif";
+      ctx.fillStyle = "#b78c3c";
+      ctx.fillText(p[0], left, y+58);
+      ctx.restore();
+
+      y = wrapLines(ctx, p.slice(1), left+62, y, maxW-62, 47, false);
+    }else{
+      y = wrapLines(ctx, p, c.center?w/2:left, y, maxW, 50, c.center);
+    }
+    y += 30;
+  });
+
+  if(c.end && c.tail){
+    ctx.font = "italic 34px Georgia, serif";
+    ctx.fillStyle = "#7a6650";
+    ctx.fillText(c.tail, c.center?w/2:left, y+28);
+  }
+}
+
+function drawIllustration(ctx,w,h,variant,caption,kind,label){
+  const palettes = {
+    lantern:["#1b2350","#3a3a6b","#7a5d72","#ffe9b0","#241a33"],
+    forest:["#27406a","#5a6f8c","#cdb48a","#2f4d3c","#16241c"],
+    river:["#4a2f55","#9a5e6c","#e7b07e","#6a4a78","#3a2742"],
+  };
+  const p = palettes[variant] || palettes.lantern;
+
+  const g = ctx.createLinearGradient(0,0,0,h);
+  g.addColorStop(0,p[0]);
+  g.addColorStop(.58,p[1]);
+  g.addColorStop(1,p[2]);
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,w,h);
+
+  ctx.fillStyle = "rgba(255,255,255,.75)";
+  for(let i=0;i<60;i++){
+    const x = pseudo(i*97.13)*w;
+    const y = pseudo(i*37.47)*h*.48;
+    const r = i%9===0?2.8:1.4;
+    ctx.beginPath();
+    ctx.arc(x,y,r,0,Math.PI*2);
+    ctx.fill();
+  }
+
+  if(variant==="lantern"){
+    const glow = ctx.createRadialGradient(w*.5,h*.48,12,w*.5,h*.48,w*.42);
+    glow.addColorStop(0,"rgba(255,233,176,.9)");
+    glow.addColorStop(1,"rgba(255,233,176,0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(0,0,w,h);
+    blobHill(ctx,w,h,h*.82,p[4]);
+    drawLantern(ctx,w*.5,h*.48,w*.20);
+  }
+
+  if(variant==="forest"){
+    ctx.fillStyle = "#fdf3d4";
+    ctx.beginPath();
+    ctx.arc(w*.72,h*.20,w*.12,0,Math.PI*2);
+    ctx.fill();
+
+    blobHill(ctx,w,h,h*.70,"#3c5a4a");
+    blobHill(ctx,w,h,h*.82,p[4]);
+
+    for(let i=0;i<8;i++){
+      const x = w*(.08+i*.13);
+      const base = h*(.70 + (i%2)*.04);
+      drawTree(ctx,x,base,w*.12,h*.24,p[3]);
+    }
+  }
+
+  if(variant==="river"){
+    ctx.fillStyle = "#ffe9c2";
+    ctx.beginPath();
+    ctx.arc(w*.5,h*.28,w*.13,0,Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle = "#6a4a78";
+    ctx.fillRect(0,h*.58,w,h*.42);
+    ctx.fillStyle = "rgba(255,242,212,.5)";
+    for(let i=0;i<7;i++){
+      const yy = h*(.62+i*.055);
+      ctx.fillRect(w*.37,yy,w*.26,5);
+    }
+    blobHill(ctx,w,h,h*.60,"rgba(58,39,66,.75)");
+  }
+
+  ctx.strokeStyle = "rgba(255,255,255,.35)";
+  ctx.lineWidth = 3;
+  roundedRect(ctx,w*.075,h*.065,w*.85,h*.86,12);
+  ctx.stroke();
+
+  if(kind==="video"){
+    ctx.fillStyle = "rgba(255,255,255,.18)";
+    ctx.strokeStyle = "rgba(255,255,255,.55)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(w*.5,h*.45,w*.09,0,Math.PI*2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.moveTo(w*.48,h*.405);
+    ctx.lineTo(w*.48,h*.495);
+    ctx.lineTo(w*.56,h*.45);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  if(kind==="embed"){
+    ctx.fillStyle = "rgba(0,0,0,.22)";
+    roundedRect(ctx,w*.36,h*.08,w*.28,h*.05,22);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,.32)";
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(255,255,255,.88)";
+    ctx.font = "600 20px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText((label||"EMBED").toUpperCase(), w*.5, h*.115);
+  }
+
+  if(caption){
+    ctx.fillStyle = "rgba(255,255,255,.94)";
+    ctx.font = "italic 28px Georgia, serif";
+    ctx.textAlign = "center";
+    ctx.shadowColor = "rgba(0,0,0,.55)";
+    ctx.shadowBlur = 10;
+    ctx.fillText(caption, w*.5, h*.91);
+    ctx.shadowBlur = 0;
+  }
+}
+
+/* ============================================================
+   PIXI MESH PAGE
+   ============================================================ */
+
+function createPageMesh(texture){
+  const vertices = new Float32Array((SEG_X+1)*(SEG_Y+1)*2);
+  const uvs = new Float32Array((SEG_X+1)*(SEG_Y+1)*2);
+  const indices = [];
+
+  let k = 0;
+  for(let y=0;y<=SEG_Y;y++){
+    for(let x=0;x<=SEG_X;x++){
+      const u = x / SEG_X;
+      const v = y / SEG_Y;
+      vertices[k*2] = u * PAGE_W;
+      vertices[k*2+1] = v * PAGE_H;
+      uvs[k*2] = u;
+      uvs[k*2+1] = v;
+      k++;
+    }
+  }
+
+  for(let y=0;y<SEG_Y;y++){
+    for(let x=0;x<SEG_X;x++){
+      const a = y*(SEG_X+1)+x;
+      const b = a+1;
+      const c = a+(SEG_X+1);
+      const d = c+1;
+      indices.push(a,c,b, b,c,d);
+    }
+  }
+
+  const mesh = new PIXI.SimpleMesh(texture, vertices, uvs, new Uint16Array(indices), PIXI.DRAW_MODES.TRIANGLES);
+  mesh.autoUpdate = true;
+  mesh.roundPixels = false;
+  mesh.alpha = 1;
+  mesh.blendMode = PIXI.BLEND_MODES.NORMAL;
+
+  return { mesh, vertices, uvs, indices };
+}
+
+function createLeaf(def){
+  const container = new PIXI.Container();
+  const frontTexture = textureForFace(def.front, "front");
+  const backTexture = textureForFace(def.back, "back");
+
+  const front = createPageMesh(frontTexture);
+  const back = createPageMesh(backTexture);
+
+  container.addChild(back.mesh, front.mesh);
+
+  const shadow = new PIXI.Graphics();
+  const highlight = new PIXI.Graphics();
+  const edge = new PIXI.Graphics();
+
+  container.addChild(shadow, edge, highlight);
+
+  const leaf = {
+    ...def,
+    container,
+    front,
+    back,
+    shadow,
+    highlight,
+    edge,
+    progress:0,
+    displaySide:"front",
+    forceActiveLayer:false,
+    active:false,
+    isCover:def.isFrontCover || def.isBackCover,
+  };
+
+  stackLayer.addChild(container);
+  updateLeafGeometry(leaf,0,false);
+  return leaf;
+}
+
+
+function cloneLeafVisual(source){
+  // Temporary visual-only page used for reverse flips.
+  // It prevents the real stacked leaf from reparenting/changing side during animation,
+  // which was the root cause of the left-arrow flicker.
+  const container = new PIXI.Container();
+  const front = createPageMesh(source.front.mesh.texture);
+  const back = createPageMesh(source.back.mesh.texture);
+  container.addChild(back.mesh, front.mesh);
+
+  const shadow = new PIXI.Graphics();
+  const highlight = new PIXI.Graphics();
+  const edge = new PIXI.Graphics();
+  container.addChild(shadow, edge, highlight);
+
+  const proxy = {
+    index: source.index,
+    isFrontCover: source.isFrontCover,
+    isBackCover: source.isBackCover,
+    isCover: source.isCover,
+    container,
+    front,
+    back,
+    shadow,
+    highlight,
+    edge,
+    progress: source.progress,
+    displaySide: source.displaySide,
+    forceActiveLayer: true,
+    active: true,
+    proxyFor: source
+  };
+
+  activeLayer.addChild(container);
+  container.zIndex = 9999;
+  return proxy;
+}
+
+/* ============================================================
+   PAGE CURL MATH
+   ============================================================ */
+
+function updateLeafGeometry(leaf, progress, activeCurl){
+  progress = clamp(progress,0,1);
+  leaf.progress = progress;
+
+  // p=0: leaf sits on right page.
+  // p=1: leaf sits on left page.
+  const p = easeInOutCubic(progress);
+  const mid = Math.sin(Math.PI * progress);
+  const stiffness = leaf.isCover ? 0.45 : 1.0;
+
+  // Resting pages must be flat.
+  const curl = activeCurl ? mid * 0.22 * stiffness : 0;
+  const lift = activeCurl ? mid * 14 : 0;
+
+  fillMeshVertices(leaf.front, p, curl, lift, +1);
+  fillMeshVertices(leaf.back, p, curl, lift, -1);
+
+  // Keep the flipping page opaque.
+  // Use a stable midpoint side switch with a tiny hysteresis.
+  // This prevents 1-frame flicker when keyboard/button animation settles.
+  if(leaf.displaySide == null){
+    leaf.displaySide = progress < 0.5 ? "front" : "back";
+  }
+
+  if(progress <= .001){
+    leaf.displaySide = "front";
+  }else if(progress >= .999){
+    leaf.displaySide = "back";
+  }else if(activeCurl){
+    // Direction-aware midpoint switch:
+    // Forward flips switch to the back just after midpoint.
+    // Backward flips switch to the front just before midpoint.
+    // This avoids a stale-side flash on left-arrow / reverse flips.
+    const dir = active && active.leaf === leaf && active.direction ? active.direction : (progress >= 0.5 ? 1 : -1);
+
+    if(dir > 0){
+      if(progress > 0.515) leaf.displaySide = "back";
+      else leaf.displaySide = "front";
+    }else{
+      // For backward flips, switch to front earlier and keep it there.
+      // This avoids a visible stale-back flash near the landing state.
+      if(progress < 0.56) leaf.displaySide = "front";
+      else leaf.displaySide = "back";
+    }
+  }else{
+    leaf.displaySide = progress < 0.5 ? "front" : "back";
+  }
+
+  leaf.front.mesh.alpha = 1;
+  leaf.back.mesh.alpha = 1;
+  leaf.front.mesh.visible = leaf.displaySide === "front";
+  leaf.back.mesh.visible = leaf.displaySide === "back";
+
+  // Update Pixi buffers.
+  leaf.front.mesh.vertices = leaf.front.vertices;
+  leaf.back.mesh.vertices = leaf.back.vertices;
+  leaf.front.mesh.dirty++;
+  leaf.back.mesh.dirty++;
+
+  updateLeafFX(leaf, progress, activeCurl, curl, lift);
+}
+
+function fillMeshVertices(page, p, curl, lift, sideSign){
+  const arr = page.vertices;
+  let k = 0;
+
+  for(let y=0;y<=SEG_Y;y++){
+    for(let x=0;x<=SEG_X;x++){
+      const u = x / SEG_X;
+      const v = y / SEG_Y;
+
+      const pt = pagePoint2D(u,v,p,curl,lift,sideSign);
+
+      arr[k++] = pt.x;
+      arr[k++] = pt.y;
+    }
+  }
+}
+
+function pagePoint2D(u,v,p,curl,lift,sideSign){
+  // Coordinates are local to the spine:
+  // x=0 is spine, positive is right side, negative is left side.
+  const yBase = (v - 0.5) * PAGE_H;
+
+  // Main fold: linear movement from right to left.
+  // u=0 stays pinned at spine, u=1 is far edge.
+  const baseX = lerp(u * PAGE_W, -u * PAGE_W, p);
+
+  // Perspective-like narrowing near mid-turn.
+  // This creates the illusion that the page is rotating through depth.
+  const perspective = 1 - Math.sin(Math.PI*p) * 0.34;
+  let x = baseX * perspective;
+
+  // Flexible paper curl.
+  // Far edge gets the most deformation. Spine barely moves.
+  const spineLock = smoothstep(0.03,0.25,u);
+  const far = smoothstep(0.20,1.0,u);
+  const wave = Math.sin(u*Math.PI);
+  const direction = p < 0.5 ? -1 : 1;
+
+  x += direction * curl * PAGE_W * wave * 0.34 * spineLock;
+
+  let y = yBase;
+
+  // Small diagonal roll so the edge does not feel like a stiff vertical line.
+  const verticalBend = Math.sin((v-.5)*Math.PI) * curl * 32 * far;
+  y += verticalBend;
+
+  // Lift toward viewer represented as a 2D vertical offset and scale pinch.
+  y -= lift * Math.sin(Math.PI*u) * 0.24;
+
+  // Far edge cup/roll.
+  x += direction * far * far * curl * PAGE_W * 0.18;
+
+  // Add small face separation in 2D so front/back don't z-fight visually.
+  x += sideSign * 0.04 * Math.sin(Math.PI*p);
+
+  return {
+    x,
+    y
+  };
+}
+
+function updateLeafFX(leaf, progress, activeCurl, curl, lift){
+  const mid = Math.sin(Math.PI * progress);
+
+  // Active leaf moves to the active layer only while actually flipping.
+  // Critical flicker fix: during a completed reverse flip, keep the visual
+  // page locked in the active layer for a couple of rendered frames before
+  // stack normalization. Otherwise Pixi can show one stale stack frame.
+  const forceActiveLayer = leaf.forceActiveLayer || (active && active.leaf === leaf && active.type === "settle");
+
+  if(forceActiveLayer || activeCurl || (progress > .001 && progress < .999)){
+    if(leaf.container.parent !== activeLayer) activeLayer.addChild(leaf.container);
+  }else{
+    if(leaf.container.parent !== stackLayer) stackLayer.addChild(leaf.container);
+  }
+
+  leaf.container.zIndex = leaf.index;
+  stackLayer.sortableChildren = true;
+  activeLayer.sortableChildren = true;
+
+  const shadow = leaf.shadow;
+  shadow.clear();
+
+  // Under-page shadow:
+  // 2x softer and more adaptive. Spread changes more noticeably with lift/elevation
+  // and with where the page is in the turn.
+  if(activeCurl && mid > 0.02){
+    const elevation = clamp(mid, 0, 1);
+    const phase = 1 - Math.abs(progress - 0.5) / 0.5; // 0 at ends, 1 at midpoint
+    const spreadness = 0.65 + elevation * 0.95 + phase * 0.40;
+
+    const centerX = lerp(PAGE_W * 0.28, -PAGE_W * 0.28, progress);
+    const centerY = lift * 0.05;
+
+    // Very broad ambient shadow
+    shadow.beginFill(0x000000, 0.028 + elevation * 0.040);
+    shadow.drawEllipse(
+      centerX * 0.96,
+      centerY + 10,
+      PAGE_W * (0.42 + spreadness * 0.34),
+      PAGE_H * (0.13 + spreadness * 0.05)
+    );
+    shadow.endFill();
+
+    // Main body shadow under the lifted sheet
+    shadow.beginFill(0x000000, 0.040 + elevation * 0.085);
+    shadow.drawEllipse(
+      centerX,
+      centerY,
+      PAGE_W * (0.26 + spreadness * 0.20),
+      PAGE_H * (0.19 + spreadness * 0.06)
+    );
+    shadow.endFill();
+
+    // Denser inner core shadow close to the page
+    shadow.beginFill(0x000000, 0.030 + elevation * 0.060);
+    shadow.drawEllipse(
+      centerX * 0.88,
+      centerY - 2,
+      PAGE_W * (0.18 + spreadness * 0.12),
+      PAGE_H * (0.12 + spreadness * 0.035)
+    );
+    shadow.endFill();
+
+    // Soft spine contact darkening, kept broad and diffused
+    shadow.beginFill(0x000000, 0.012 + elevation * 0.020);
+    shadow.drawRoundedRect(-36, -PAGE_H * 0.47, 72, PAGE_H * 0.94, 28);
+    shadow.endFill();
+
+    shadow.filters = [new PIXI.BlurFilter(36 + elevation * 52, 7)];
+  }else{
+    shadow.filters = null;
+  }
+
+  // Far-edge rim / page-edge lighting:
+  // more diffused and less line-like.
+  const edge = leaf.edge;
+  edge.clear();
+
+  if(activeCurl && mid > 0.06){
+    const farPtTop = pagePoint2D(1, 0, progress, curl, lift, 0);
+    const farPtBottom = pagePoint2D(1, 1, progress, curl, lift, 0);
+
+    const dx = farPtBottom.x - farPtTop.x;
+    const dy = farPtBottom.y - farPtTop.y;
+    const len = Math.max(Math.hypot(dx, dy), 1);
+    const nx = -dy / len;
+    const ny = dx / len;
+
+    const halfW = leaf.isCover ? 12 : 9;
+
+    edge.beginFill(0xffffff, (leaf.isCover ? 0.035 : 0.030) * mid);
+    edge.drawPolygon([
+      farPtTop.x + nx * halfW,    farPtTop.y + ny * halfW,
+      farPtBottom.x + nx * halfW, farPtBottom.y + ny * halfW,
+      farPtBottom.x - nx * halfW, farPtBottom.y - ny * halfW,
+      farPtTop.x - nx * halfW,    farPtTop.y - ny * halfW
+    ]);
+    edge.endFill();
+    edge.blendMode = PIXI.BLEND_MODES.SCREEN;
+    edge.filters = [new PIXI.BlurFilter(16, 5)];
+  }else{
+    edge.filters = null;
+  }
+
+  // Page highlight:
+  // about 2x softer/wider so it reads as blurred sheen instead of a white stripe.
+  const hi = leaf.highlight;
+  hi.clear();
+
+  if(activeCurl && mid > 0.03){
+    const alpha = 0.040 * mid;
+    const sx = lerp(PAGE_W * 0.62, -PAGE_W * 0.62, progress);
+
+    hi.beginFill(0xffffff, alpha);
+    hi.drawPolygon([
+      sx - 86, -PAGE_H * 0.56,
+      sx + 42, -PAGE_H * 0.56,
+      sx - 6,   PAGE_H * 0.56,
+      sx - 134, PAGE_H * 0.56
+    ]);
+    hi.endFill();
+
+    hi.beginFill(0xffffff, alpha * 0.55);
+    hi.drawPolygon([
+      sx - 134, -PAGE_H * 0.58,
+      sx + 110, -PAGE_H * 0.58,
+      sx + 34,   PAGE_H * 0.58,
+      sx - 210,  PAGE_H * 0.58
+    ]);
+    hi.endFill();
+
+    hi.blendMode = PIXI.BLEND_MODES.SCREEN;
+    hi.filters = [new PIXI.BlurFilter(48, 7)];
+  }else{
+    hi.filters = null;
+  }
+}
+
+/* ============================================================
+   LAYOUT / STATE
+   ============================================================ */
+
+function resize(){
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  // Full-viewport responsive book sizing:
+  // The OPEN SPREAD is the main product view, so it should nearly fill the
+  // available screen. When the browser is resized/minimized, the book scales
+  // down immediately because PAGE_W is recalculated from the current viewport.
+  const isPhone = vw < 560;
+  const isShort = vh < 620;
+
+  // Keep only minimal safe margins. Controls float above the scene, so they
+  // should not force the book to feel tiny.
+  const sideMargin = isPhone ? 10 : 22;
+  const topMargin = isPhone ? 30 : 38;
+  const bottomMargin = isShort ? 56 : isPhone ? 76 : 88;
+
+  const availableW = Math.max(220, vw - sideMargin * 2);
+  const availableH = Math.max(260, vh - topMargin - bottomMargin);
+
+  // The spread is 2 pages wide. Each page ratio is W:H = 1:1.42.
+  // Fit by whichever viewport dimension is tighter.
+  const pageByWidth = availableW / 2;
+  const pageByHeight = availableH / 1.42;
+
+  PAGE_W = Math.min(pageByWidth, pageByHeight);
+
+  // No conservative desktop cap: large screens should show a large beautiful book.
+  // Only cap extreme sizes so textures/interaction stay sane.
+  PAGE_W = Math.min(PAGE_W, 680);
+  PAGE_W = Math.max(PAGE_W, isPhone ? 132 : 170);
+  PAGE_H = PAGE_W * 1.42;
+
+  SPINE_X = vw / 2;
+
+  // Center the book in the visible reading area.
+  // On short screens, lift it slightly so the nav doesn't cover the bottom edge.
+  const readingTop = topMargin;
+  const readingBottom = vh - bottomMargin;
+  BOOK_Y = (readingTop + readingBottom) / 2;
+  if(isShort) BOOK_Y -= 8;
+
+  root.position.set(SPINE_X, BOOK_Y);
+
+  // All existing vertices must be recalculated after a resize.
+  leaves.forEach(l=>{
+    updateLeafGeometry(l,l.progress,l.active);
+  });
+
+  updateRootShift();
+  drawFloor();
+  drawGutterOverlay();
+}
+
+function updateRootShift(){
+  const shift = closedShiftFor(flipped);
+  root.x = SPINE_X + shift;
+  document.getElementById("titleTag").classList.toggle("show", flipped > 0 && flipped < leaves.length);
+}
+
+function closedShiftFor(f){
+  if(f <= 0) return -PAGE_W/2;
+  if(f >= leaves.length) return PAGE_W/2;
+  return 0;
+}
+
+function layoutAll(){
+  leaves.forEach((leaf,i)=>{
+    const p = i < flipped ? 1 : 0;
+    leaf.active = false;
+    leaf.forceActiveLayer = false;
+    leaf.displaySide = p < 0.5 ? "front" : "back";
+    updateLeafGeometry(leaf,p,false);
+
+    // Right stack and left stack order.
+    leaf.container.zIndex = i < flipped ? i : leaves.length - i;
+
+    // Closed states should look like a single closed book, not a blank inner page.
+    // At load, show only the front cover leaf. At the end, show only the back cover leaf.
+    if(flipped === 0){
+      leaf.container.visible = i === 0;
+    }else if(flipped === leaves.length){
+      leaf.container.visible = i === leaves.length - 1;
+    }else{
+      leaf.container.visible = true;
+    }
+  });
+
+  // Guarantee the front cover is the visible side on first load.
+  if(flipped === 0 && leaves[0]){
+    leaves[0].displaySide = "front";
+    leaves[0].front.mesh.visible = true;
+    leaves[0].back.mesh.visible = false;
+    leaves[0].container.visible = true;
+  }
+
+  updateRootShift();
+  updateUI();
+  drawFloor();
+  drawGutterOverlay();
+}
+
+
+function drawGutterOverlay(){
+  chromeLayer.removeChildren();
+
+  const openLike = (flipped > 0 && flipped < leaves.length) || !!active;
+  if(!openLike) return;
+
+  const gutterWrap = new PIXI.Container();
+
+  // Core soft dark gutter
+  const core = new PIXI.Graphics();
+  core.beginFill(0x000000, 0.050);
+  core.drawRoundedRect(-11, -PAGE_H * 0.50, 22, PAGE_H, 14);
+  core.endFill();
+  core.filters = [new PIXI.BlurFilter(16, 5)];
+  gutterWrap.addChild(core);
+
+  // Broad soft shadow spread from the center gutter
+  const spread = new PIXI.Graphics();
+  spread.beginFill(0x000000, 0.030);
+  spread.drawRoundedRect(-34, -PAGE_H * 0.50, 68, PAGE_H, 24);
+  spread.endFill();
+  spread.filters = [new PIXI.BlurFilter(34, 6)];
+  gutterWrap.addChild(spread);
+
+  // Very light paper-catching highlights on both sides of the gutter
+  const leftGlow = new PIXI.Graphics();
+  leftGlow.beginFill(0xffffff, 0.028);
+  leftGlow.drawRoundedRect(-42, -PAGE_H * 0.48, 18, PAGE_H * 0.96, 18);
+  leftGlow.endFill();
+  leftGlow.blendMode = PIXI.BLEND_MODES.SCREEN;
+  leftGlow.filters = [new PIXI.BlurFilter(20, 5)];
+  gutterWrap.addChild(leftGlow);
+
+  const rightGlow = new PIXI.Graphics();
+  rightGlow.beginFill(0xffffff, 0.020);
+  rightGlow.drawRoundedRect(24, -PAGE_H * 0.48, 18, PAGE_H * 0.96, 18);
+  rightGlow.endFill();
+  rightGlow.blendMode = PIXI.BLEND_MODES.SCREEN;
+  rightGlow.filters = [new PIXI.BlurFilter(20, 5)];
+  gutterWrap.addChild(rightGlow);
+
+  chromeLayer.addChild(gutterWrap);
+}
+
+function drawFloor(){
+  floorLayer.removeChildren();
+
+  // Smart floor-shadow behavior:
+  // derive everything from the book's CURRENT shift, not only from discrete states.
+  // That way the shadow glides smoothly during open/close transitions and never
+  // jumps from left to right.
+  const currentShift = root.x - SPINE_X;          // local book offset from spine-centered state
+  const openness = clamp(1 - Math.abs(currentShift) / (PAGE_W * 0.5), 0, 1);
+  const shadowCenterX = -currentShift;            // keeps the shadow under the visible closed book
+  const openLike = openness > 0.02 || (flipped > 0 && flipped < leaves.length) || !!active;
+
+  const widthFactor = lerp(1.05, 1.95, easeInOutCubic(openness));
+  const shadowAlpha = lerp(0.24, 0.30, openness);
+  const shadowBlur = lerp(18, 24, openness);
+
+  const g = new PIXI.Graphics();
+  g.beginFill(0x000000, shadowAlpha);
+  g.drawEllipse(shadowCenterX, PAGE_H * 0.55, PAGE_W * widthFactor * 0.5, PAGE_H * 0.16);
+  g.endFill();
+  g.filters = [new PIXI.BlurFilter(shadowBlur, 5)];
+  floorLayer.addChild(g);
+
+  // Add a very broad soft under-shadow spread for open states so the book feels grounded.
+  if(openLike){
+    const spread = new PIXI.Graphics();
+    spread.beginFill(0x000000, 0.06 * openness);
+    spread.drawEllipse(shadowCenterX, PAGE_H * 0.57, PAGE_W * (0.95 + openness * 0.55), PAGE_H * (0.07 + openness * 0.02));
+    spread.endFill();
+    spread.filters = [new PIXI.BlurFilter(28 + openness * 14, 6)];
+    floorLayer.addChild(spread);
+  }
+
+  // Center floor gutter hint under the book.
+  // Keep it subtle, and fade it based on openness so it appears/disappears smoothly.
+  if(openLike){
+    const gutter = new PIXI.Graphics();
+    gutter.beginFill(0x000000, 0.10 * openness);
+    gutter.drawRoundedRect(-14, -PAGE_H * .5, 28, PAGE_H, 14);
+    gutter.endFill();
+    gutter.filters = [new PIXI.BlurFilter(20 + openness * 6, 5)];
+    floorLayer.addChild(gutter);
+  }
+}
+
+function canNext(){ return !active && flipped < leaves.length; }
+function canPrev(){ return !active && flipped > 0; }
+
+function goNext(){
+  if(!canNext()) return;
+  hasInteracted = true;
+  const leaf = leaves[flipped];
+  leaf.displaySide = "front";
+  leaf.front.mesh.visible = true;
+  leaf.back.mesh.visible = false;
+  startAutoFlip(flipped,0,1,true);
+}
+
+function goPrev(){
+  if(!canPrev()) return;
+  hasInteracted = true;
+  const leaf = leaves[flipped-1];
+  leaf.displaySide = "back";
+  leaf.front.mesh.visible = false;
+  leaf.back.mesh.visible = true;
+  startAutoFlip(flipped-1,1,0,false);
+}
+
+function startAutoFlip(index,from,to,forward){
+  const realLeaf = leaves[index];
+
+  // When opening from the closed cover, reveal the inner stack before the cover moves.
+  if(forward && flipped === 0){
+    leaves.forEach(l => l.container.visible = true);
+  }
+
+  // Reverse/left flips use a temporary proxy mesh. The real page stays hidden
+  // until the final stack state is already committed, eliminating the stale-frame flicker.
+  const useProxy = !forward;
+  const leaf = useProxy ? cloneLeafVisual(realLeaf) : realLeaf;
+
+  realLeaf.active = true;
+  if(useProxy){
+    realLeaf.container.visible = false;
+  }
+
+  leaf.active = true;
+  leaf.displaySide = from < 0.5 ? "front" : "back";
+  updateLeafGeometry(leaf, from, false);
+
+  active = {
+    type:"auto",
+    leaf,
+    realLeaf,
+    useProxy,
+    index,
+    from,
+    to,
+    forward,
+    direction: to > from ? 1 : -1,
+    start:performance.now(),
+    duration:realLeaf.isCover ? 900 : 680,
+    commit:true
+  };
+
+  document.getElementById("hint").classList.add("hide");
+}
+
+function tick(){
+  if(!active) return;
+
+  // One-frame delayed stack normalization after a completed flip.
+  // This removes the reverse/left flip flicker caused by reparenting and
+  // changing visible sides in the same render frame.
+  if(active.type === "settle"){
+    active.frames++;
+
+    // Keep exact final resting side visible during the settle frames.
+    const p = active.finalProgress;
+    const side = p < 0.5 ? "front" : "back";
+    active.leaf.forceActiveLayer = true;
+    active.leaf.displaySide = side;
+    updateLeafGeometry(active.leaf, p, false);
+    active.leaf.front.mesh.visible = side === "front";
+    active.leaf.back.mesh.visible = side === "back";
+    active.leaf.front.mesh.alpha = 1;
+    active.leaf.back.mesh.alpha = 1;
+    active.leaf.shadow.clear();
+    active.leaf.edge.clear();
+    active.leaf.highlight.clear();
+
+    if(active.frames >= 3){
+      const leaf = active.leaf;
+      const pendingFlipped = active.pendingFlipped;
+      active = null;
+      flipped = pendingFlipped;
+      leaf.forceActiveLayer = false;
+      leaf.active = false;
+      layoutAll();
+    }
+    drawFloor();
+    drawGutterOverlay();
+    updateUI();
+    return;
+  }
+
+  if(active.type !== "auto") return;
+
+  const t = clamp((performance.now() - active.start) / active.duration, 0, 1);
+  const e = easeOutCubic(t);
+  const p = lerp(active.from, active.to, e);
+
+  // Curl fades before final landing.
+  const curlActive = t > .01 && t < .94;
+  updateLeafGeometry(active.leaf,p,curlActive);
+
+  const intendedFlipped = active.forward ? flipped+1 : flipped-1;
+  const shift = lerp(closedShiftFor(flipped), closedShiftFor(intendedFlipped), e);
+  root.x = SPINE_X + shift;
+
+  if(t >= 1){
+    const finished = active;
+    const pendingFlipped = finished.commit ? intendedFlipped : flipped;
+
+    // Proxy path: commit real stack behind the proxy, then remove the proxy.
+    // Because the real leaf never changed parent/side during the animation,
+    // there is no final stale-frame flicker on left-arrow flips.
+    if(finished.useProxy){
+      const realLeaf = finished.realLeaf;
+      const finalSide = finished.to < 0.5 ? "front" : "back";
+
+      updateLeafGeometry(finished.leaf, finished.to, false);
+      finished.leaf.displaySide = finalSide;
+      finished.leaf.front.mesh.visible = finalSide === "front";
+      finished.leaf.back.mesh.visible = finalSide === "back";
+
+      flipped = pendingFlipped;
+      realLeaf.container.visible = true;
+      realLeaf.active = false;
+      realLeaf.forceActiveLayer = false;
+      realLeaf.displaySide = finalSide;
+      updateLeafGeometry(realLeaf, finished.to, false);
+
+      layoutAll();
+      activeLayer.removeChild(finished.leaf.container);
+      finished.leaf.container.destroy({children:true});
+      active = null;
+      updateUI();
+      return;
+    }
+
+    // Normal forward path.
+    flipped = pendingFlipped;
+    finished.leaf.active = false;
+    finished.leaf.forceActiveLayer = false;
+    active = null;
+    layoutAll();
+    updateUI();
+    return;
+  }
+
+  drawFloor();
+  drawGutterOverlay();
+  updateUI();
+}
+
+/* ============================================================
+   POINTER DRAG
+   ============================================================ */
+
+app.view.addEventListener("pointerdown",(e)=>{
+  if(active) return;
+
+  const forward = e.clientX > window.innerWidth/2;
+
+  if(forward && flipped >= leaves.length) return;
+  if(!forward && flipped <= 0) return;
+
+  const index = forward ? flipped : flipped-1;
+  const leaf = leaves[index];
+
+  // Important closed-cover fix:
+  // when the user starts dragging the front cover open, reveal the inner stack
+  // immediately so the right side is visible behind the cover instead of looking empty.
+  if(forward && flipped === 0){
+    leaves.forEach(l => l.container.visible = true);
+    // Keep the front cover itself visible and on top.
+    if(leaves[0]){
+      leaves[0].container.visible = true;
+      leaves[0].displaySide = "front";
+      leaves[0].front.mesh.visible = true;
+      leaves[0].back.mesh.visible = false;
+    }
+  }
+
+  drag = {
+    pointerId:e.pointerId,
+    startX:e.clientX,
+    forward,
+    index,
+    leaf,
+    moved:0,
+    progress:forward ? 0 : 1
+  };
+
+  active = {
+    type:"drag",
+    leaf,
+    index,
+    forward
+  };
+
+  leaf.active = true;
+  app.view.setPointerCapture(e.pointerId);
+
+  // No pre-lift. Page remains flat until the pointer actually moves.
+  updateLeafGeometry(leaf,drag.progress,false);
+  drawFloor();
+  drawGutterOverlay();
+  updateUI();
+  document.getElementById("hint").classList.add("hide");
+});
+
+app.view.addEventListener("pointermove",(e)=>{
+  if(!drag || e.pointerId !== drag.pointerId) return;
+
+  const dx = e.clientX - drag.startX;
+  drag.moved = Math.max(drag.moved, Math.abs(dx));
+
+  let p;
+  if(drag.forward){
+    p = clamp((-dx) / (PAGE_W * 0.88), 0, 1);
+  }else{
+    p = clamp(1 - (dx) / (PAGE_W * 0.88), 0, 1);
+  }
+
+  drag.progress = p;
+  const curlActive = drag.moved > 2;
+
+  updateLeafGeometry(drag.leaf,p,curlActive);
+
+  const intendedFlipped = flipped + (drag.forward ? 1 : -1);
+  const amount = drag.forward ? p : (1-p);
+  const shift = lerp(closedShiftFor(flipped), closedShiftFor(intendedFlipped), amount);
+  root.x = SPINE_X + shift;
+
+  drawFloor();
+  drawGutterOverlay();
+  updateUI();
+});
+
+app.view.addEventListener("pointerup",endDrag);
+app.view.addEventListener("pointercancel",endDrag);
+
+function endDrag(e){
+  if(!drag || (e && e.pointerId !== drag.pointerId)) return;
+
+  const d = drag;
+  drag = null;
+  hasInteracted = true;
+
+  const clicked = d.moved < 5;
+
+  if(clicked){
+    active = null;
+    d.leaf.active = false;
+    layoutAll();
+    d.forward ? goNext() : goPrev();
+    return;
+  }
+
+  const complete = d.forward ? d.progress > .42 : d.progress < .58;
+  const from = d.progress;
+  const to = complete ? (d.forward ? 1 : 0) : (d.forward ? 0 : 1);
+
+  active = {
+    type:"auto",
+    leaf:d.leaf,
+    index:d.index,
+    from,
+    to,
+    forward:d.forward,
+    direction: to > from ? 1 : -1,
+    start:performance.now(),
+    duration:complete ? 520 : 420,
+    commit:complete
+  };
+}
+
+/* ============================================================
+   DOM CONTROLS
+   ============================================================ */
+
+const prevBtn = document.getElementById("prevBtn");
+const nextBtn = document.getElementById("nextBtn");
+const dotsEl = document.getElementById("dots");
+const dbgEl = document.getElementById("dbg");
+
+prevBtn.addEventListener("click",goPrev);
+nextBtn.addEventListener("click",goNext);
+
+window.addEventListener("keydown",(e)=>{
+  if(e.key === "ArrowRight" || e.key === " "){
+    e.preventDefault();
+    goNext();
+  }else if(e.key === "ArrowLeft"){
+    e.preventDefault();
+    goPrev();
+  }else if(e.key.toLowerCase() === "d"){
+    document.body.classList.toggle("debug");
+    updateUI();
+  }
+});
+
+function createDots(){
+  dotsEl.innerHTML = "";
+  leaves.forEach(()=>{
+    const dot = document.createElement("div");
+    dot.className = "dot";
+    dotsEl.appendChild(dot);
+  });
+}
+
+function updateUI(){
+  prevBtn.disabled = !!active || flipped <= 0;
+  nextBtn.disabled = !!active || flipped >= leaves.length;
+
+  [...dotsEl.children].forEach((d,i)=>{
+    d.classList.toggle("on", i < flipped);
+  });
+
+  document.getElementById("hint").classList.toggle("hide", hasInteracted || flipped > 0);
+
+  if(document.body.classList.contains("debug")){
+    const state = flipped === 0 ? "CLOSED FRONT COVER" :
+                  flipped === leaves.length ? "CLOSED BACK COVER" :
+                  "OPEN SPREAD";
+    const activeText = active ? `active leaf=${active.index ?? "settle"} type=${active.type} p=${active.leaf.progress.toFixed(3)} pending=${active.pendingFlipped ?? "-"}` : "active none";
+    dbgEl.textContent =
+      `PixiJS custom mesh page curl\n` +
+      `state: ${state}\n` +
+      `flipped: ${flipped}/${leaves.length}\n` +
+      `${activeText}\n` +
+      `mesh: ${(SEG_X+1)} x ${(SEG_Y+1)} vertices per face\n` +
+      `D = debug`;
+  }
+}
+
+/* ============================================================
+   DRAW HELPERS
+   ============================================================ */
+
+function pseudo(n){
+  let v = Math.sin(n)*43758.5453123;
+  v = v - Math.floor(v);
+  return v;
+}
+
+function wrapLines(ctx,text,x,y,maxW,lineH,center=false){
+  const words = String(text).split(/\s+/);
+  let line = "";
+  for(let i=0;i<words.length;i++){
+    const test = line ? line+" "+words[i] : words[i];
+    if(ctx.measureText(test).width > maxW && line){
+      ctx.fillText(line,x,y);
+      line = words[i];
+      y += lineH;
+    }else{
+      line = test;
+    }
+  }
+  if(line) ctx.fillText(line,x,y);
+  return y + lineH;
+}
+
+function starPath(ctx,cx,cy,outer,inner,points){
+  ctx.beginPath();
+  for(let i=0;i<points*2;i++){
+    const a = -Math.PI/2 + i*Math.PI/points;
+    const r = i%2===0 ? outer : inner;
+    const x = cx + Math.cos(a)*r;
+    const y = cy + Math.sin(a)*r;
+    if(i===0) ctx.moveTo(x,y);
+    else ctx.lineTo(x,y);
+  }
+  ctx.closePath();
+}
+
+function roundedRect(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.lineTo(x+w-r,y);
+  ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r);
+  ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h);
+  ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r);
+  ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();
+}
+
+function blobHill(ctx,w,h,y,color){
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(0,y);
+  ctx.bezierCurveTo(w*.22,y-h*.08,w*.34,y+h*.06,w*.50,y);
+  ctx.bezierCurveTo(w*.68,y-h*.08,w*.80,y+h*.05,w,y-h*.02);
+  ctx.lineTo(w,h);
+  ctx.lineTo(0,h);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawTree(ctx,x,base,w,h,color){
+  ctx.fillStyle = "#241b14";
+  ctx.fillRect(x-w*.04,base-h*.12,w*.08,h*.24);
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(x,base-h);
+  ctx.lineTo(x+w*.42,base-h*.28);
+  ctx.lineTo(x-w*.42,base-h*.28);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "#456b53";
+  ctx.beginPath();
+  ctx.moveTo(x,base-h*.72);
+  ctx.lineTo(x+w*.34,base-h*.12);
+  ctx.lineTo(x-w*.34,base-h*.12);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawLantern(ctx,x,y,s){
+  ctx.save();
+  ctx.translate(x,y);
+  ctx.strokeStyle = "#caa14a";
+  ctx.lineWidth = 8;
+  ctx.fillStyle = "#3a2d1a";
+  roundedRect(ctx,-s*.48,-s*.58,s*.96,s*1.16,12);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = "#ffe7a6";
+  ctx.globalAlpha = .92;
+  roundedRect(ctx,-s*.34,-s*.44,s*.68,s*.88,10);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  ctx.fillStyle = "#fff6d8";
+  ctx.beginPath();
+  ctx.ellipse(0,0,s*.14,s*.26,0,0,Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/* ============================================================
+   MATH HELPERS
+   ============================================================ */
+
+function clamp(v,min,max){ return Math.max(min,Math.min(max,v)); }
+function lerp(a,b,t){ return a + (b-a)*t; }
+function easeOutCubic(t){ return 1 - Math.pow(1-t,3); }
+function easeInOutCubic(t){
+  return t < .5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2;
+}
+function smoothstep(edge0,edge1,x){
+  const t = clamp((x-edge0)/(edge1-edge0),0,1);
+  return t*t*(3-2*t);
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+
+async function loadStorybookFromApi(){
+  try {
+    const res = await fetch(`/api/storybooks/${encodeURIComponent(storySlug)}`, { credentials: "same-origin" });
+    if (!res.ok) throw new Error(`storybook api ${res.status}`);
+    const json = await res.json();
+    STORYBOOK = normalizeStorybookFromApi(json);
+  } catch (err) {
+    console.warn("Using fallback storybook mock due to API load error:", err);
+    STORYBOOK = DEFAULT_STORYBOOK;
+  }
+}
+
+async function init(){
+  await loadStorybookFromApi();
+  const titleTag = document.getElementById("titleTag");
+  if (titleTag) titleTag.textContent = STORYBOOK.title || DEFAULT_STORYBOOK.title;
+  const faces = buildFaces(STORYBOOK);
+  const defs = pairFacesIntoLeaves(faces);
+
+  leaves = defs.map(createLeaf);
+  createDots();
+
+  // Always start closed on the front cover.
+  flipped = 0;
+  active = null;
+
+  resize();
+  layoutAll();
+
+  app.ticker.add(tick);
+}
+
+window.addEventListener("resize",resize);
+
+init();
+</script>
+</body>
+</html>
