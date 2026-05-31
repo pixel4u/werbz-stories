@@ -104,6 +104,69 @@ function surfacePreview(page: StudioPageRow | null, label: string, coverAssetId?
   return <div style={{ color: "#94a3b8", fontSize: 14 }}>{summaryText(page)}</div>;
 }
 
+// A single book page rendered as real paper: off-white sheet, soft shadow,
+// page-number label, selected glow, and a friendly drop zone when empty.
+function BookPage({
+  page,
+  label,
+  selected,
+  coverAssetId,
+  isCover,
+  side,
+}: {
+  page: StudioPageRow | null;
+  label: string;
+  selected: boolean;
+  coverAssetId?: string | null;
+  isCover?: boolean;
+  side: "left" | "right" | "single";
+}) {
+  const empty = !page || (!assetPreviewUrl(page, coverAssetId, isCover) && page.content.kind === "image") ||
+    (!!page && page.content.kind === "text" && !page.content.title && !page.content.body && !page.content.backgroundAssetId);
+  const radius = side === "left" ? "10px 4px 4px 10px" : side === "right" ? "4px 10px 10px 4px" : "10px";
+  return (
+    <div
+      style={{
+        position: "relative",
+        background: "#fdfdfb",
+        borderRadius: radius,
+        boxShadow: selected
+          ? "0 0 0 3px #2563eb, 0 10px 28px rgba(15,23,42,.18)"
+          : "0 8px 22px rgba(15,23,42,.14)",
+        border: "1px solid #ece8df",
+        overflow: "hidden",
+        aspectRatio: "3 / 4",
+        display: "grid",
+      }}
+    >
+      {page && !empty ? (
+        <div style={{ width: "100%", height: "100%" }}>{surfacePreview(page, label, coverAssetId, isCover)}</div>
+      ) : (
+        <div style={{ display: "grid", placeItems: "center", gap: "0.5rem", color: "#9aa3b2", padding: "1rem", textAlign: "center" }}>
+          <div style={{ width: 54, height: 54, borderRadius: 12, border: "2px dashed #cbd5e1", display: "grid", placeItems: "center", fontSize: 24 }}>+</div>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Upload image</div>
+          <div style={{ fontSize: 12 }}>or add text in the panel →</div>
+        </div>
+      )}
+      <span
+        style={{
+          position: "absolute",
+          bottom: 8,
+          left: side === "right" ? "auto" : 10,
+          right: side === "right" ? 10 : "auto",
+          fontSize: 11,
+          color: "#94a3b8",
+          background: "rgba(255,255,255,.7)",
+          borderRadius: 6,
+          padding: "1px 6px",
+        }}
+      >
+        {label}
+      </span>
+    </div>
+  );
+}
+
 function TextEditorFields({
   storybookId,
   page,
@@ -368,54 +431,62 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
     );
   }
 
+
+  // Selection is via ?page=<id> (default: first page). No modal — left list,
+  // center book preview, and right editor stay on screen together.
   const selectedId = query.page;
   const selectedIndex = storybook.pages.findIndex((p) => p.id === selectedId);
   const effectiveSelectedIndex = selectedIndex >= 0 ? selectedIndex : 0;
   const selectedPage = storybook.pages[effectiveSelectedIndex] || null;
 
-  const isEditMode = query.mode === "edit" && !!selectedPage;
+  const total = storybook.pages.length;
   const isReorderMode = query.reorder === "1";
-
-  const selectedIsCover = effectiveSelectedIndex === 0;
-  const selectedIsEnd = effectiveSelectedIndex === storybook.pages.length - 1 && storybook.pages.length > 1;
   const isAddMode = query.mode === "add";
+  const selectedIsCover = effectiveSelectedIndex === 0;
+  const selectedIsEnd = effectiveSelectedIndex === total - 1 && total > 1;
 
   const previewLink = `/api/book/${encodeURIComponent(storybook.slug)}?engine=best&slug=${encodeURIComponent(storybook.slug)}`;
   const publicLink = `https://werbz.com/${storybook.slug}`;
   const nextStatus = storybook.status === "published" ? "draft" : "published";
   const justPublished = query.published === "1" && storybook.status === "published";
 
-  const selectedSpreadLeft =
-    selectedPage && !selectedIsCover && !selectedIsEnd
-      ? selectedPage.side === "left"
-        ? selectedPage
-        : storybook.pages[effectiveSelectedIndex - 1] ?? null
-      : null;
-  const selectedSpreadRight =
-    selectedPage && !selectedIsCover && !selectedIsEnd
-      ? selectedPage.side === "right"
-        ? selectedPage
-        : storybook.pages[effectiveSelectedIndex + 1] ?? null
-      : null;
+  // Center preview: cover and end are single pages; a story page shows the open
+  // spread it belongs to. Middle pages are indices 1..total-2, paired (1,2),(3,4)...
+  let spreadLeftIdx = -1;
+  let spreadRightIdx = -1;
+  if (!selectedIsCover && !selectedIsEnd && total > 1) {
+    const middlePos = effectiveSelectedIndex - 1; // 0-based within middle pages
+    const pair = Math.floor(middlePos / 2);
+    spreadLeftIdx = 1 + pair * 2;
+    spreadRightIdx = spreadLeftIdx + 1;
+    if (spreadRightIdx > total - 2) spreadRightIdx = -1; // odd tail: no right page
+  }
+
+  const selectStyle = { padding: "0.6rem", borderRadius: 8, border: "1px solid #d6dce5" } as const;
 
   return (
-    <main style={{ maxWidth: 1560, margin: "1rem auto", padding: "1rem", fontFamily: "system-ui, sans-serif", color: "#0f172a" }}>
+    <main style={{ maxWidth: 1640, margin: "0 auto", minHeight: "100vh", padding: "1rem 1.2rem", fontFamily: "system-ui, sans-serif", color: "#0f172a", background: "#f6f7fb" }}>
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap", marginBottom: "1rem" }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: 28 }}>{storybook.title}</h1>
-          <p style={{ margin: "0.35rem 0 0", color: "#475569" }}>{storybook.status === "published" ? "Published" : "Draft"} • {storybook.pageCount} pages</p>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.8rem" }}>
+          <Link href="/studio" style={{ padding: "0.45rem 0.7rem", border: "1px solid #d1d5db", borderRadius: 8, textDecoration: "none", color: "inherit", background: "#fff", fontSize: 13 }}>← Studio</Link>
+          <div>
+            <h1 style={{ margin: 0, fontSize: 22 }}>{storybook.title}</h1>
+            <p style={{ margin: "0.2rem 0 0", color: "#64748b", fontSize: 13 }}>{storybook.status === "published" ? "Published" : "Draft"} • {total} pages</p>
+          </div>
+          <span style={{ background: storybook.status === "published" ? "#d1fae5" : "#f1f5f9", color: storybook.status === "published" ? "#065f46" : "#475569", borderRadius: 999, padding: "0.2rem 0.6rem", fontSize: 12, fontWeight: 700 }}>
+            {storybook.status === "published" ? "Published" : "Draft"}
+          </span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-          <Link href={previewLink} target="_blank" style={{ padding: "0.55rem 0.85rem", border: "1px solid #d1d5db", borderRadius: 8, textDecoration: "none", color: "inherit" }}>Preview Book</Link>
+          <Link href={previewLink} target="_blank" style={{ padding: "0.55rem 0.85rem", border: "1px solid #d1d5db", borderRadius: 8, textDecoration: "none", color: "inherit", background: "#fff", fontWeight: 600 }}>Preview Book</Link>
           <form action={togglePublishAction}>
             <input type="hidden" name="storybookId" value={storybook.id} />
             <input type="hidden" name="nextStatus" value={nextStatus} />
-            <button type="submit" style={{ padding: "0.55rem 0.85rem", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer", fontWeight: 700 }}>
+            <button type="submit" style={{ padding: "0.55rem 0.95rem", borderRadius: 8, border: "1px solid #2563eb", background: "#2563eb", color: "#fff", cursor: "pointer", fontWeight: 700 }}>
               {storybook.status === "published" ? "Unpublish" : "Publish"}
             </button>
           </form>
           {storybook.status === "published" ? <CopyLinkButton url={publicLink} /> : null}
-          <Link href="/studio" style={{ padding: "0.55rem 0.85rem", border: "1px solid #d1d5db", borderRadius: 8, textDecoration: "none", color: "inherit" }}>Back to Studio</Link>
         </div>
       </header>
 
@@ -432,200 +503,111 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
         </section>
       ) : null}
 
-      {storybook.pages.length === 0 ? (
-        <section style={{ border: "1px solid #e5e7eb", borderRadius: 14, background: "#fff", padding: "1.2rem" }}>
+      {total === 0 ? (
+        <section style={{ border: "1px solid #e5e7eb", borderRadius: 14, background: "#fff", padding: "1.4rem", maxWidth: 560 }}>
           <h2 style={{ marginTop: 0 }}>Start your storybook</h2>
-          <p style={{ color: "#64748b" }}>Upload all pages at once, or add your first page manually.</p>
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(320px, 520px)", gap: "0.8rem" }}>
-            <BulkUploadForm storybookId={storybook.id} />
-            <details>
-              <summary style={{ cursor: "pointer", padding: "0.6rem 0.8rem", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", width: 170, textAlign: "center", fontWeight: 700 }}>
-                Add First Page
-              </summary>
-              <form action={addPageAction} style={{ display: "grid", gap: "0.5rem", marginTop: "0.55rem", maxWidth: 300 }}>
-                <input type="hidden" name="storybookId" value={storybook.id} />
-                <select name="kind" defaultValue="text" style={{ padding: "0.55rem" }}>
-                  <option value="text">Text page</option>
-                  <option value="image">Image page</option>
-                  <option value="video">Video page</option>
-                  <option value="embed">Embed page</option>
-                </select>
-                <button type="submit" style={{ padding: "0.55rem", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer" }}>Create page</button>
-              </form>
-            </details>
-          </div>
+          <p style={{ color: "#64748b" }}>Upload all your page images at once, or add your first page.</p>
+          <BulkUploadForm storybookId={storybook.id} />
+          <form action={addPageAction} style={{ marginTop: "0.8rem" }}>
+            <input type="hidden" name="storybookId" value={storybook.id} />
+            <input type="hidden" name="kind" value="text" />
+            <button type="submit" style={{ padding: "0.6rem 0.9rem", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer", fontWeight: 600 }}>Add a text page</button>
+          </form>
         </section>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "330px minmax(760px, 1fr)", gap: "1rem", alignItems: "start" }}>
-          <aside style={{ position: "sticky", top: 10 }}>
-            <section style={{ border: "1px solid #e5e7eb", borderRadius: 12, background: "#fff", padding: "0.75rem" }}>
-              <h3 style={{ margin: "0 0 0.6rem", fontSize: 14 }}>Pages</h3>
-              <div style={{ display: "grid", gap: "0.45rem", maxHeight: "72vh", overflow: "auto", paddingRight: 4 }}>
-                {storybook.pages.map((page, index) => {
-                  const selected = selectedPage?.id === page.id;
-                  const thumb = assetPreviewUrl(page, storybook.coverAssetId, index === 0);
-                  const warn = validationWarning(page);
-                  const label = pageLabel(index, storybook.pages.length);
-                  return (
-                    <div key={page.id} style={{ border: selected ? "2px solid #2563eb" : "1px solid #e2e8f0", borderRadius: 10, padding: "0.45rem", background: selected ? "#eff6ff" : "#fff" }}>
-                      <Link href={`/studio/${storybook.id}?mode=edit&page=${encodeURIComponent(page.id)}`} style={{ display: "flex", gap: "0.55rem", alignItems: "center", textDecoration: "none", color: "inherit" }}>
-                        <div style={{ width: 58, height: 78, borderRadius: 6, border: "1px solid #cbd5e1", overflow: "hidden", background: "#f8fafc", display: "grid", placeItems: "center" }}>
-                          {thumb ? <img src={thumb} alt="thumb" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: 22, color: "#94a3b8" }}>{pageKindIcon(page.content.kind)}</span>}
-                        </div>
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 700 }}>{label}</div>
-                          {warn ? <div style={{ fontSize: 11, color: "#b45309" }}>{warn}</div> : null}
-                        </div>
-                      </Link>
-
-                      {isReorderMode && index > 0 && index < storybook.pages.length - 1 ? (
-                        <div style={{ display: "flex", gap: "0.4rem", marginTop: "0.4rem" }}>
-                          <form action={moveUpAction}>
-                            <input type="hidden" name="storybookId" value={storybook.id} />
-                            <input type="hidden" name="pageId" value={page.id} />
-                            <button type="submit" style={{ padding: "0.3rem 0.6rem", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer" }}>◀</button>
-                          </form>
-                          <form action={moveDownAction}>
-                            <input type="hidden" name="storybookId" value={storybook.id} />
-                            <input type="hidden" name="pageId" value={page.id} />
-                            <button type="submit" style={{ padding: "0.3rem 0.6rem", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer" }}>▶</button>
-                          </form>
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div style={{ marginTop: "0.7rem", display: "grid", gap: "0.55rem" }}>
-                <Link
-                  href={`/studio/${storybook.id}?mode=add`}
-                  style={{ padding: "0.6rem", borderRadius: 8, border: "1px solid #d1d5db", textAlign: "center", fontWeight: 700, textDecoration: "none", color: "inherit" }}
-                >
-                  + Add Page
-                </Link>
-
-                <div style={{ border: "1px solid #dbe3ef", borderRadius: 8, padding: "0.6rem" }}>
-                  <strong style={{ fontSize: 13 }}>Upload Full Book</strong>
-                  <p style={{ margin: "0.3rem 0 0.5rem", fontSize: 12, color: "#64748b" }}>
-                    First image → Cover, last image → End, middle images → story pages.
-                  </p>
-                  <BulkUploadForm storybookId={storybook.id} />
-                </div>
-
-                <Link
-                  href={`/studio/${storybook.id}?reorder=${isReorderMode ? "0" : "1"}`}
-                  style={{ textAlign: "center", padding: "0.55rem", borderRadius: 8, border: "1px solid #d1d5db", textDecoration: "none", color: "inherit" }}
-                >
-                  {isReorderMode ? "Done Reordering" : "Reorder Pages"}
-                </Link>
-              </div>
-            </section>
-          </aside>
-
-          <section style={{ border: "1px solid #e5e7eb", borderRadius: 12, background: "#fff", padding: "0.9rem" }}>
-            <h3 style={{ margin: "0 0 0.7rem", fontSize: 14 }}>Book Timeline</h3>
-
-            <div style={{ display: "grid", gap: "0.8rem" }}>
-              {selectedPage ? (
-                <div style={{ border: "1px solid #dbe3ef", borderRadius: 12, padding: "0.8rem", background: "#f8fbff" }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: "0.45rem" }}>
-                    {selectedIsCover ? "Selected: Cover" : selectedIsEnd ? "Selected: End" : `Selected Spread • ${pageLabel(effectiveSelectedIndex, storybook.pages.length)}`}
-                  </div>
-                  {selectedIsCover || selectedIsEnd ? (
-                    <div style={{ height: 340, borderRadius: 10, border: "1px solid #dbe3ef", overflow: "hidden", background: "#fff", display: "grid", placeItems: "center" }}>
-                      {surfacePreview(selectedPage, pageLabel(effectiveSelectedIndex, storybook.pages.length), storybook.coverAssetId, selectedIsCover)}
-                    </div>
-                  ) : (
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.8rem" }}>
-                      <div style={{ borderRadius: 10, border: "1px solid #dbe3ef", background: "#fff", minHeight: 300, overflow: "hidden", display: "grid", placeItems: "center" }}>
-                        {selectedSpreadLeft ? surfacePreview(selectedSpreadLeft, "Left page", storybook.coverAssetId, false) : <span style={{ color: "#94a3b8" }}>Left page empty</span>}
-                      </div>
-                      <div style={{ borderRadius: 10, border: "1px solid #dbe3ef", background: "#fff", minHeight: 300, overflow: "hidden", display: "grid", placeItems: "center" }}>
-                        {selectedSpreadRight ? surfacePreview(selectedSpreadRight, "Right page", storybook.coverAssetId, false) : <span style={{ color: "#94a3b8" }}>Right page empty</span>}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : null}
-
-              <div style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: "0.8rem", background: "#fafafa" }}>
-                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: "0.45rem" }}>Cover</div>
-                <div style={{ height: 280, borderRadius: 10, border: "1px solid #dbe3ef", overflow: "hidden", background: "#fff", display: "grid", placeItems: "center" }}>
-                  {surfacePreview(storybook.pages[0] || null, "Cover", storybook.coverAssetId, true)}
-                </div>
-              </div>
-
-              {Array.from({ length: Math.ceil(Math.max(0, storybook.pages.length - 2) / 2) }).map((_, spreadIdx) => {
-                const base = 1 + spreadIdx * 2;
-                const left = storybook.pages[base] || null;
-                const right = storybook.pages[base + 1] || null;
+        <div style={{ display: "grid", gridTemplateColumns: "260px minmax(0, 1fr) 360px", gap: "1rem", alignItems: "start" }}>
+          {/* LEFT: page list */}
+          <aside style={{ border: "1px solid #e5e7eb", borderRadius: 14, background: "#fff", padding: "0.7rem", position: "sticky", top: "1rem" }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: ".05em", margin: "0.1rem 0 0.6rem" }}>Pages</div>
+            <div style={{ display: "grid", gap: "0.4rem", maxHeight: "62vh", overflow: "auto", paddingRight: 2 }}>
+              {storybook.pages.map((page, index) => {
+                const selected = page.id === selectedPage?.id;
+                const thumb = assetPreviewUrl(page, storybook.coverAssetId, index === 0);
+                const warn = validationWarning(page);
+                const label = pageLabel(index, total);
                 return (
-                  <div key={`spread-${spreadIdx}`} style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: "0.8rem", background: "#fafafa" }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: "0.45rem" }}>Spread {spreadIdx + 1}</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.8rem" }}>
-                      <div style={{ borderRadius: 10, border: "1px solid #dbe3ef", background: "#fff", minHeight: 260, overflow: "hidden", display: "grid", placeItems: "center" }}>
-                        {left ? surfacePreview(left, pageLabel(base, storybook.pages.length), storybook.coverAssetId, false) : <span style={{ color: "#94a3b8" }}>Empty</span>}
+                  <div key={page.id} style={{ border: selected ? "2px solid #2563eb" : "1px solid #e2e8f0", borderRadius: 10, padding: "0.4rem", background: selected ? "#eff6ff" : "#fff" }}>
+                    <Link href={`/studio/${storybook.id}?page=${encodeURIComponent(page.id)}`} style={{ display: "flex", gap: "0.55rem", alignItems: "center", textDecoration: "none", color: "inherit" }}>
+                      <div style={{ width: 46, height: 60, borderRadius: 6, border: "1px solid #cbd5e1", overflow: "hidden", background: "#f8fafc", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                        {thumb ? <img src={thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: 18, color: "#94a3b8" }}>{pageKindIcon(page.content.kind)}</span>}
                       </div>
-                      <div style={{ borderRadius: 10, border: "1px solid #dbe3ef", background: "#fff", minHeight: 260, overflow: "hidden", display: "grid", placeItems: "center" }}>
-                        {right ? surfacePreview(right, pageLabel(base + 1, storybook.pages.length), storybook.coverAssetId, false) : <span style={{ color: "#94a3b8" }}>Empty</span>}
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700 }}>{label}</div>
+                        {warn ? <div style={{ fontSize: 11, color: "#b45309" }}>{warn}</div> : null}
                       </div>
-                    </div>
+                    </Link>
+                    {isReorderMode && index > 0 && index < total - 1 ? (
+                      <div style={{ display: "flex", gap: "0.4rem", marginTop: "0.4rem" }}>
+                        <form action={moveUpAction}>
+                          <input type="hidden" name="storybookId" value={storybook.id} />
+                          <input type="hidden" name="pageId" value={page.id} />
+                          <button type="submit" title="Move earlier" style={{ padding: "0.25rem 0.55rem", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer" }}>◀</button>
+                        </form>
+                        <form action={moveDownAction}>
+                          <input type="hidden" name="storybookId" value={storybook.id} />
+                          <input type="hidden" name="pageId" value={page.id} />
+                          <button type="submit" title="Move later" style={{ padding: "0.25rem 0.55rem", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer" }}>▶</button>
+                        </form>
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}
-
-              {storybook.pages.length > 1 ? (
-                <div style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: "0.8rem", background: "#fafafa" }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: "0.45rem" }}>End</div>
-                  <div style={{ height: 280, borderRadius: 10, border: "1px solid #dbe3ef", overflow: "hidden", background: "#fff", display: "grid", placeItems: "center" }}>
-                    {surfacePreview(storybook.pages[storybook.pages.length - 1] || null, "End", storybook.coverAssetId, false)}
-                  </div>
-                </div>
-              ) : null}
             </div>
+            <div style={{ marginTop: "0.7rem", display: "grid", gap: "0.5rem" }}>
+              <Link href={`/studio/${storybook.id}?mode=add`} style={{ padding: "0.55rem", borderRadius: 8, border: "1px solid #d1d5db", textAlign: "center", fontWeight: 700, textDecoration: "none", color: "inherit", background: "#fff" }}>+ Add Page</Link>
+              <Link href={`/studio/${storybook.id}?upload=1${selectedPage ? `&page=${encodeURIComponent(selectedPage.id)}` : ""}`} style={{ padding: "0.55rem", borderRadius: 8, border: "1px solid #d1d5db", textAlign: "center", fontWeight: 600, textDecoration: "none", color: "inherit", background: "#fff" }}>Upload Full Book</Link>
+              <Link href={`/studio/${storybook.id}?reorder=${isReorderMode ? "0" : "1"}${selectedPage ? `&page=${encodeURIComponent(selectedPage.id)}` : ""}`} style={{ padding: "0.5rem", borderRadius: 8, border: "1px solid #d1d5db", textAlign: "center", textDecoration: "none", color: "inherit", background: isReorderMode ? "#eff6ff" : "#fff" }}>{isReorderMode ? "Done Reordering" : "Reorder Pages"}</Link>
+            </div>
+          </aside>
+
+          {/* CENTER: book preview */}
+          <section style={{ display: "grid", placeItems: "center", padding: "1rem 0.5rem", minHeight: "60vh" }}>
+            {selectedIsCover || selectedIsEnd ? (
+              <div style={{ width: "min(420px, 70%)" }}>
+                <div style={{ textAlign: "center", fontSize: 13, fontWeight: 700, color: "#475569", marginBottom: "0.6rem" }}>{selectedIsCover ? "Front Cover" : "Back Cover / End"}</div>
+                <BookPage page={selectedPage} label={selectedIsCover ? "Cover" : "End"} selected coverAssetId={storybook.coverAssetId} isCover={selectedIsCover} side="single" />
+              </div>
+            ) : (
+              <div style={{ width: "min(900px, 100%)" }}>
+                <div style={{ textAlign: "center", fontSize: 13, fontWeight: 700, color: "#475569", marginBottom: "0.6rem" }}>Open Spread</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2, background: "linear-gradient(90deg,#e9e6dd,#cfcabd,#e9e6dd)", borderRadius: 12, padding: 2 }}>
+                  <BookPage
+                    page={spreadLeftIdx >= 0 ? storybook.pages[spreadLeftIdx] : null}
+                    label={spreadLeftIdx >= 0 ? pageLabel(spreadLeftIdx, total) : ""}
+                    selected={spreadLeftIdx === effectiveSelectedIndex}
+                    coverAssetId={storybook.coverAssetId}
+                    side="left"
+                  />
+                  <BookPage
+                    page={spreadRightIdx >= 0 ? storybook.pages[spreadRightIdx] : null}
+                    label={spreadRightIdx >= 0 ? pageLabel(spreadRightIdx, total) : ""}
+                    selected={spreadRightIdx === effectiveSelectedIndex}
+                    coverAssetId={storybook.coverAssetId}
+                    side="right"
+                  />
+                </div>
+              </div>
+            )}
           </section>
-        </div>
-      )}
 
-      {isEditMode && selectedPage ? (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.46)", zIndex: 70, display: "grid", placeItems: "center", padding: "1.2rem" }}>
-          <div style={{ width: "min(1280px, 100%)", maxHeight: "92vh", overflow: "auto", background: "#fff", borderRadius: 14, boxShadow: "0 20px 60px rgba(15,23,42,.28)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.9rem 1rem", borderBottom: "1px solid #e5e7eb" }}>
-              <div>
-                <h2 style={{ margin: 0, fontSize: 20 }}>{selectedIsCover ? "Editing Cover" : selectedIsEnd ? "Editing End Page" : `Editing ${pageLabel(effectiveSelectedIndex, storybook.pages.length)}`}</h2>
-                <p style={{ margin: "0.25rem 0 0", color: "#64748b", fontSize: 13 }}>{summaryText(selectedPage)}</p>
-              </div>
-              <Link href={`/studio/${storybook.id}?page=${encodeURIComponent(selectedPage.id)}`} style={{ padding: "0.5rem 0.8rem", borderRadius: 8, border: "1px solid #d1d5db", textDecoration: "none", color: "inherit" }}>
-                Done
-              </Link>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "minmax(520px, 1fr) 380px", gap: "1rem", padding: "1rem" }}>
-              <div style={{ border: "1px solid #e2e8f0", borderRadius: 12, background: "#fafafa", padding: "0.8rem" }}>
-                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: "0.45rem" }}>Page Preview</div>
-                <div style={{ height: 560, borderRadius: 10, border: "1px solid #dbe3ef", overflow: "hidden", background: "#fff", display: "grid", placeItems: "center" }}>
-                  {surfacePreview(selectedPage, pageLabel(effectiveSelectedIndex, storybook.pages.length), storybook.coverAssetId, selectedIsCover)}
-                </div>
-              </div>
-
-              <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, background: "#fff", padding: "0.85rem" }}>
+          {/* RIGHT: editor for the selected page */}
+          <aside style={{ border: "1px solid #e5e7eb", borderRadius: 14, background: "#fff", padding: "0.9rem", position: "sticky", top: "1rem" }}>
+            {selectedPage ? (
+              <>
+                <h2 style={{ margin: "0 0 0.2rem", fontSize: 18 }}>{selectedIsCover ? "Editing Cover" : selectedIsEnd ? "Editing End" : `Editing ${pageLabel(effectiveSelectedIndex, total)}`}</h2>
+                <p style={{ margin: "0 0 0.8rem", color: "#64748b", fontSize: 13 }}>{summaryText(selectedPage)}</p>
                 <form action={updatePageAction} style={{ display: "grid", gap: "0.6rem" }}>
                   <input type="hidden" name="storybookId" value={storybook.id} />
                   <input type="hidden" name="pageId" value={selectedPage.id} />
                   <input type="hidden" name="kind" value={selectedPage.content.kind} />
                   <input type="hidden" name="side" value={selectedPage.side} />
-
                   <TextEditorFields storybookId={storybook.id} page={selectedPage} removeImageAction={removePageImageAction} isCover={selectedIsCover} coverAssetId={storybook.coverAssetId} />
                   <ImageEditorFields storybookId={storybook.id} page={selectedPage} removeImageAction={removePageImageAction} />
                   <VideoEditorFields page={selectedPage} />
                   <EmbedEditorFields page={selectedPage} />
-
-                  <button type="submit" style={{ marginTop: "0.4rem", padding: "0.7rem", borderRadius: 9, border: "1px solid #2563eb", background: "#2563eb", color: "#fff", cursor: "pointer", fontWeight: 700 }}>
-                    Save Page
-                  </button>
+                  <button type="submit" style={{ marginTop: "0.3rem", padding: "0.7rem", borderRadius: 9, border: "1px solid #2563eb", background: "#2563eb", color: "#fff", cursor: "pointer", fontWeight: 700 }}>Save Page</button>
                 </form>
-
                 <div style={{ borderTop: "1px solid #e5e7eb", marginTop: "0.85rem", paddingTop: "0.75rem", display: "grid", gap: "0.5rem" }}>
                   <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>Page Actions</div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "0.45rem" }}>
@@ -651,26 +633,24 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
                     <DeletePageForm storybookId={storybook.id} pageId={selectedPage.id} action={deletePageAction} />
                   </div>
                 </div>
-              </div>
-            </div>
-          </div>
+              </>
+            ) : null}
+          </aside>
         </div>
-      ) : null}
+      )}
 
       {isAddMode ? (
         <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.46)", zIndex: 70, display: "grid", placeItems: "center", padding: "1.2rem" }}>
-          <div style={{ width: "min(460px, 100%)", background: "#fff", borderRadius: 14, boxShadow: "0 20px 60px rgba(15,23,42,.28)", padding: "1rem" }}>
+          <div style={{ width: "min(440px, 100%)", background: "#fff", borderRadius: 14, boxShadow: "0 20px 60px rgba(15,23,42,.28)", padding: "1rem" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.8rem" }}>
-              <h2 style={{ margin: 0, fontSize: 20 }}>Add Page</h2>
-              <Link href={`/studio/${storybook.id}`} style={{ padding: "0.5rem 0.8rem", borderRadius: 8, border: "1px solid #d1d5db", textDecoration: "none", color: "inherit" }}>
-                Close
-              </Link>
+              <h2 style={{ margin: 0, fontSize: 18 }}>Add Page</h2>
+              <Link href={`/studio/${storybook.id}`} style={{ padding: "0.45rem 0.75rem", borderRadius: 8, border: "1px solid #d1d5db", textDecoration: "none", color: "inherit" }}>Close</Link>
             </div>
             <form action={addPageAction} style={{ display: "grid", gap: "0.65rem" }}>
               <input type="hidden" name="storybookId" value={storybook.id} />
               <label style={{ display: "grid", gap: "0.3rem", fontSize: 13 }}>
                 Page type
-                <select name="kind" defaultValue="text" style={{ padding: "0.6rem", borderRadius: 8, border: "1px solid #d6dce5" }}>
+                <select name="kind" defaultValue="text" style={selectStyle}>
                   <option value="text">Text page</option>
                   <option value="image">Image page</option>
                   <option value="video">Video poster page</option>
@@ -678,10 +658,20 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
                 </select>
               </label>
               <p style={{ margin: 0, fontSize: 12, color: "#94a3b8" }}>New pages are added before the End and arranged into spreads automatically.</p>
-              <button type="submit" style={{ marginTop: "0.35rem", padding: "0.7rem", borderRadius: 9, border: "1px solid #2563eb", background: "#2563eb", color: "#fff", cursor: "pointer", fontWeight: 700 }}>
-                Create Page
-              </button>
+              <button type="submit" style={{ marginTop: "0.35rem", padding: "0.7rem", borderRadius: 9, border: "1px solid #2563eb", background: "#2563eb", color: "#fff", cursor: "pointer", fontWeight: 700 }}>Create Page</button>
             </form>
+          </div>
+        </div>
+      ) : null}
+
+      {query.upload === "1" ? (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.46)", zIndex: 70, display: "grid", placeItems: "center", padding: "1.2rem" }}>
+          <div style={{ width: "min(520px, 100%)", background: "#fff", borderRadius: 14, boxShadow: "0 20px 60px rgba(15,23,42,.28)", padding: "1rem" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.8rem" }}>
+              <h2 style={{ margin: 0, fontSize: 18 }}>Upload Full Book</h2>
+              <Link href={`/studio/${storybook.id}${selectedPage ? `?page=${encodeURIComponent(selectedPage.id)}` : ""}`} style={{ padding: "0.45rem 0.75rem", borderRadius: 8, border: "1px solid #d1d5db", textDecoration: "none", color: "inherit" }}>Close</Link>
+            </div>
+            <BulkUploadForm storybookId={storybook.id} />
           </div>
         </div>
       ) : null}

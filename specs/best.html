@@ -370,33 +370,56 @@ let hasInteracted = false;
    ============================================================ */
 
 function buildFaces(sb){
+  // CANONICAL ONLY: the book shows exactly the canonical pages and nothing else.
+  // normalizeStorybookFromApi() flattens the payload into sb.pages as
+  // [cover, ...story pages, end]. We map:
+  //   first page  -> front cover face
+  //   middle pages -> content faces (the readable story)
+  //   last page   -> back cover face (the end)
+  // No decorative endpapers, half-title, or star pages are injected.
+  const pages = Array.isArray(sb.pages) ? sb.pages : [];
   const faces = [];
-  faces.push({ type:"cover-front", data:sb.cover });
-  faces.push({ type:"endpaper" });
 
-  if(sb.pages.length % 2 !== 0){
-    faces.push({ type:"halftitle", data:sb });
+  if (pages.length === 0) {
+    faces.push({ type: "cover-front", data: sb.cover });
+    faces.push({ type: "cover-back", data: sb.back });
+    return faces;
   }
 
-  sb.pages.forEach(p => faces.push({
-    type:"content",
-    data:p.content,
-    pid:p.id,
-    meta:{
-      id:p.id,
-      position:p.position,
-      side:p.side,
-      kind:p.content?.kind || "text",
-      assetId:p.content?.assetId || null,
-      poster:p.content?.poster || null,
-    }
-  }));
+  const lastIndex = pages.length - 1;
+  const contentFace = (p) => ({
+    type: "content",
+    data: p.content,
+    pid: p.id,
+    meta: {
+      id: p.id,
+      position: p.position,
+      side: p.side,
+      kind: p.content?.kind || "text",
+      assetId: p.content?.assetId || null,
+      poster: p.content?.poster || null,
+    },
+  });
 
-  // Keep face count even so every leaf has both front/back textures.
-  // Without this, an odd face count leaves `def.back` undefined and the
-  // renderer crashes mid-init, which manifests as a small top-left sheet.
-  faces.push({ type:"endpaper" });
-  faces.push({ type:"cover-back", data:sb.back });
+  pages.forEach((p, i) => {
+    const coverAssetId = p.content?.assetId || p.content?.backgroundAssetId || p.content?.src || null;
+    if (i === 0) {
+      // Front cover: render the real first page's image on the hardback cover.
+      faces.push({ type: "cover-front", data: { ...sb.cover, coverAssetId } });
+    } else if (i === lastIndex && lastIndex > 0) {
+      // Back cover: the canonical end page.
+      faces.push({ type: "cover-back", data: { ...sb.back, coverAssetId } });
+    } else {
+      faces.push(contentFace(p));
+    }
+  });
+
+  // Keep the face count even so every physical leaf has front+back textures.
+  // The only filler ever added is a plain blank sheet placed LAST (the hidden
+  // back of the back cover) — never a readable/decorative page in the story.
+  if (faces.length % 2 !== 0) {
+    faces.push({ type: "blank" });
+  }
   return faces;
 }
 
@@ -512,19 +535,11 @@ function drawFaceContent(ctx,w,h,face,side,bgImage){
     drawCover(ctx,w,h,face.data,true,bgImage);
     return;
   }
-  if(face.type === "endpaper"){
-    drawEndpaper(ctx,w,h);
-    return;
-  }
-  if(face.type === "halftitle"){
-    drawEndpaper(ctx,w,h);
-    ctx.textAlign = "center";
-    ctx.fillStyle = "#43362a";
-    ctx.font = "500 48px Georgia, serif";
-    wrapLines(ctx, STORYBOOK.title, w*.5, h*.43, w*.70, 56, true);
-    ctx.fillStyle = "#7a6650";
-    ctx.font = "italic 28px Georgia, serif";
-    ctx.fillText(STORYBOOK.author, w*.5, h*.58);
+  if(face.type === "blank" || face.type === "endpaper" || face.type === "halftitle"){
+    // Plain paper only. Decorative endpapers/half-title/star pages were removed
+    // so the reader shows nothing that is not a canonical page. The hidden
+    // even-parity filler ("blank") and any legacy face types fall through here.
+    drawPaper(ctx,w,h,side);
     return;
   }
 
