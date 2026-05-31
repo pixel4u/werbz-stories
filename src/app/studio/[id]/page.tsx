@@ -70,14 +70,6 @@ function validationWarning(page: StudioPageRow): string | null {
   return null;
 }
 
-function spreadRange(selectedIndex: number, total: number): [number, number] {
-  if (selectedIndex <= 0) return [0, 0];
-  if (selectedIndex >= total - 1) return [total - 1, total - 1];
-  const left = selectedIndex % 2 === 0 ? selectedIndex : selectedIndex - 1;
-  const right = Math.min(total - 1, left + 1);
-  return [left, right];
-}
-
 function SectionCard({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section style={{ border: "1px solid #e5e7eb", borderRadius: 12, background: "#fff", padding: "0.75rem" }}>
@@ -85,6 +77,43 @@ function SectionCard({ title, children }: { title: string; children: ReactNode }
       {children}
     </section>
   );
+}
+
+function PageSurfacePreview({ page, label }: { page: StudioPageRow | null; label: string }) {
+  if (!page) {
+    return <div style={{ padding: "1rem", color: "#94a3b8" }}>Empty</div>;
+  }
+
+  const preview = assetPreviewUrl(page);
+  const kind = page.content.kind;
+
+  if (preview) {
+    return <img src={preview} alt={label} style={{ width: "100%", height: 340, objectFit: "cover" }} />;
+  }
+
+  if (kind === "text") {
+    return (
+      <div
+        style={{
+          width: "100%",
+          height: 340,
+          background: page.content.background || "#ffffff",
+          color: page.content.background ? "#ffffff" : "#1f2937",
+          padding: "1rem",
+          overflow: "hidden",
+          display: "grid",
+          alignContent: "start",
+          gap: "0.45rem",
+        }}
+      >
+        {page.content.eyebrow ? <div style={{ fontSize: 11, opacity: 0.7, textTransform: "uppercase" }}>{page.content.eyebrow}</div> : null}
+        {page.content.title ? <div style={{ fontSize: 26, fontWeight: 700, lineHeight: 1.1 }}>{page.content.title}</div> : null}
+        <div style={{ fontSize: 14, lineHeight: 1.4, opacity: 0.92 }}>{page.content.body || "No body text yet"}</div>
+      </div>
+    );
+  }
+
+  return <div style={{ padding: "1rem", color: "#94a3b8" }}>{contentSummary(page.content)}</div>;
 }
 
 function TextFields({ storybookId, page, removeImageAction, isCover }: { storybookId: string; page: StudioPageRow; removeImageAction: (f: FormData) => Promise<void>; isCover: boolean }) {
@@ -331,9 +360,10 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
   const selectedIndex = Math.max(0, storybook.pages.findIndex((p) => p.id === selectedId));
   const effectiveSelectedIndex = selectedId && selectedIndex >= 0 ? selectedIndex : 0;
   const selectedPage = storybook.pages[effectiveSelectedIndex] || null;
-  const [leftIndex, rightIndex] = spreadRange(effectiveSelectedIndex, storybook.pages.length);
-  const leftPage = storybook.pages[leftIndex] || null;
-  const rightPage = storybook.pages[rightIndex] || null;
+  const selectedIsCover = effectiveSelectedIndex === 0;
+  const selectedIsEnd = effectiveSelectedIndex === storybook.pages.length - 1 && storybook.pages.length > 1;
+  const leftPage = selectedPage?.side === "right" ? null : selectedPage;
+  const rightPage = selectedPage?.side === "right" ? selectedPage : null;
   const previewLink = `/${storybook.slug}`;
   const publicLink = `https://werbz.com/${storybook.slug}`;
   const nextStatus = storybook.status === "published" ? "draft" : "published";
@@ -399,20 +429,38 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
                 );
               })}
             </div>
-            <form action={addPageAction} style={{ display: "grid", gap: "0.5rem", marginTop: "0.65rem" }}>
-              <input type="hidden" name="storybookId" value={storybook.id} />
-              <select name="kind" defaultValue="text" style={{ padding: "0.5rem" }}>
-                <option value="text">Text page</option>
-                <option value="image">Image page</option>
-                <option value="video">Video page</option>
-                <option value="embed">Embed page</option>
-              </select>
-              <select name="side" defaultValue="right" style={{ padding: "0.5rem" }}>
-                <option value="left">left</option>
-                <option value="right">right</option>
-              </select>
-              <button type="submit" style={{ padding: "0.6rem", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer" }}>Add Page</button>
-            </form>
+            <details style={{ marginTop: "0.65rem" }}>
+              <summary
+                style={{
+                  listStyle: "none",
+                  cursor: "pointer",
+                  padding: "0.6rem",
+                  borderRadius: 8,
+                  border: "1px solid #d1d5db",
+                  background: "#fff",
+                  textAlign: "center",
+                  fontWeight: 700,
+                }}
+              >
+                Add Page
+              </summary>
+              <form action={addPageAction} style={{ display: "grid", gap: "0.5rem", marginTop: "0.55rem" }}>
+                <input type="hidden" name="storybookId" value={storybook.id} />
+                <select name="kind" defaultValue="text" style={{ padding: "0.5rem" }}>
+                  <option value="text">Text page</option>
+                  <option value="image">Image page</option>
+                  <option value="video">Video page</option>
+                  <option value="embed">Embed page</option>
+                </select>
+                <select name="side" defaultValue="right" style={{ padding: "0.5rem" }}>
+                  <option value="left">left spread</option>
+                  <option value="right">right spread</option>
+                </select>
+                <button type="submit" style={{ padding: "0.6rem", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer" }}>
+                  Create Page
+                </button>
+              </form>
+            </details>
             <div style={{ marginTop: "0.65rem" }}>
               <BulkUploadForm storybookId={storybook.id} />
             </div>
@@ -420,15 +468,14 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
         </aside>
 
         <section style={{ display: "grid", gap: "1rem" }}>
-          <SectionCard title="Spread Preview">
+          <SectionCard title="Selected Page Preview">
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", alignItems: "stretch" }}>
               {[leftPage, rightPage].map((page, slot) => {
                 if (!page) {
                   return <div key={`blank-${slot}`} style={{ border: "1px dashed #cbd5e1", borderRadius: 10, minHeight: 420, background: "#f8fafc" }} />;
                 }
-                const idx = slot === 0 ? leftIndex : rightIndex;
+                const idx = storybook.pages.findIndex((p) => p.id === page.id);
                 const label = pageLabel(idx, storybook.pages.length);
-                const thumb = assetPreviewUrl(page);
                 return (
                   <div key={page.id} style={{ border: "1px solid #dbe3ef", borderRadius: 10, minHeight: 420, padding: "0.5rem", background: "#fff", display: "grid", gridTemplateRows: "auto 1fr auto" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#334155" }}>
@@ -436,7 +483,7 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
                       <span>{page.side}</span>
                     </div>
                     <div style={{ marginTop: "0.45rem", borderRadius: 8, border: "1px solid #e2e8f0", overflow: "hidden", background: "#f8fafc", display: "grid", placeItems: "center" }}>
-                      {thumb ? <img src={thumb} alt={label} style={{ width: "100%", height: 340, objectFit: "cover" }} /> : <div style={{ padding: "1rem", color: "#94a3b8" }}>{contentSummary(page.content)}</div>}
+                      <PageSurfacePreview page={page} label={label} />
                     </div>
                     <p style={{ margin: "0.55rem 0 0", fontSize: 12, color: "#64748b" }}>{contentSummary(page.content)}</p>
                   </div>
@@ -445,16 +492,16 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: "0.7rem" }}>
               <Link
-                href={`/studio/${storybook.id}?page=${encodeURIComponent(storybook.pages[Math.max(0, leftIndex - 2)]?.id || storybook.pages[0]?.id || "")}`}
+                href={`/studio/${storybook.id}?page=${encodeURIComponent(storybook.pages[Math.max(0, effectiveSelectedIndex - 1)]?.id || storybook.pages[0]?.id || "")}`}
                 style={{ padding: "0.45rem 0.7rem", border: "1px solid #d1d5db", borderRadius: 8, textDecoration: "none", color: "inherit" }}
               >
-                Previous Spread
+                Previous Page
               </Link>
               <Link
-                href={`/studio/${storybook.id}?page=${encodeURIComponent(storybook.pages[Math.min(storybook.pages.length - 1, rightIndex + 1)]?.id || storybook.pages[0]?.id || "")}`}
+                href={`/studio/${storybook.id}?page=${encodeURIComponent(storybook.pages[Math.min(storybook.pages.length - 1, effectiveSelectedIndex + 1)]?.id || storybook.pages[0]?.id || "")}`}
                 style={{ padding: "0.45rem 0.7rem", border: "1px solid #d1d5db", borderRadius: 8, textDecoration: "none", color: "inherit" }}
               >
-                Next Spread
+                Next Page
               </Link>
             </div>
           </SectionCard>
@@ -475,12 +522,21 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
                   <input type="hidden" name="storybookId" value={storybook.id} />
                   <input type="hidden" name="pageId" value={selectedPage.id} />
                   <input type="hidden" name="kind" value={selectedPage.content.kind} />
-                  <select name="side" defaultValue={selectedPage.side} style={{ padding: "0.5rem" }}>
-                    <option value="left">left</option>
-                    <option value="right">right</option>
-                  </select>
+                  {selectedIsCover || selectedIsEnd ? (
+                    <>
+                      <input type="hidden" name="side" value={selectedPage.side} />
+                      <p style={{ margin: 0, padding: "0.5rem", borderRadius: 8, background: "#f8fafc", fontSize: 13, color: "#475569" }}>
+                        {selectedIsCover ? "Cover page" : "End page"} uses standalone layout. Side is automatic.
+                      </p>
+                    </>
+                  ) : (
+                    <select name="side" defaultValue={selectedPage.side} style={{ padding: "0.5rem" }}>
+                      <option value="left">left</option>
+                      <option value="right">right</option>
+                    </select>
+                  )}
 
-                  <TextFields storybookId={storybook.id} page={selectedPage} removeImageAction={removePageImageAction} isCover={effectiveSelectedIndex === 0} />
+                  <TextFields storybookId={storybook.id} page={selectedPage} removeImageAction={removePageImageAction} isCover={selectedIsCover} />
                   <ImageFields storybookId={storybook.id} page={selectedPage} removeImageAction={removePageImageAction} />
                   <VideoFields page={selectedPage} />
                   <EmbedFields page={selectedPage} />
