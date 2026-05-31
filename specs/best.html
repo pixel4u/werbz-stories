@@ -390,19 +390,24 @@ function buildFaces(sb){
     }
   }));
 
+  // Keep face count even so every leaf has both front/back textures.
+  // Without this, an odd face count leaves `def.back` undefined and the
+  // renderer crashes mid-init, which manifests as a small top-left sheet.
+  faces.push({ type:"endpaper" });
   faces.push({ type:"cover-back", data:sb.back });
   return faces;
 }
 
 function pairFacesIntoLeaves(faces){
   const out = [];
-  for(let i=0; i<faces.length; i+=2){
+  const safeFaces = faces.length % 2 === 0 ? faces : [...faces, { type: "endpaper" }];
+  for(let i=0; i<safeFaces.length; i+=2){
     out.push({
       index:i/2,
-      front:faces[i],
-      back:faces[i+1],
+      front:safeFaces[i],
+      back:safeFaces[i+1],
       isFrontCover:i===0,
-      isBackCover:i >= faces.length-2
+      isBackCover:i >= safeFaces.length-2
     });
   }
   return out;
@@ -423,19 +428,20 @@ function getFaceAssetId(face){
 }
 
 function textureForFace(face, side){
+  const safeFace = face || { type: "endpaper" };
   const c = document.createElement("canvas");
   c.width = 900;
   c.height = 1278;
   const ctx = c.getContext("2d");
-  drawFace(ctx,c.width,c.height,face,side);
+  drawFace(ctx,c.width,c.height,safeFace,side);
   const texture = PIXI.Texture.from(c);
 
-  const assetId = getFaceAssetId(face);
+  const assetId = getFaceAssetId(safeFace);
   if (assetId) {
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => {
-      drawFace(ctx, c.width, c.height, face, side, img);
+      drawFace(ctx, c.width, c.height, safeFace, side, img);
       texture.update();
     };
     img.onerror = () => {
