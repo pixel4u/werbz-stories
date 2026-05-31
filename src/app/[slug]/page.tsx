@@ -132,21 +132,29 @@ export default async function StoryPage({ params, searchParams }: StoryPageProps
     );
   }
 
-  const isStudioOwner = await isStudioAuthenticated();
-  if (isStudioOwner) {
-    return <BookViewer slug={slug} />;
-  }
+  // PUBLIC READER: the OTP email gate is intentionally bypassed so anyone with
+  // the link can read the story. The OTP API + GateView + viewer-service remain
+  // intact (just not used by this path) so the gate can be re-enabled later by
+  // restoring the GateView branch below.
+  //
+  // Previously gated flow (kept for reference / quick re-enable):
+  //   const isStudioOwner = await isStudioAuthenticated();
+  //   if (!isStudioOwner) {
+  //     const session = await readViewerSessionCookie();
+  //     const verified = session && (await findVerifiedViewer(session.viewerId, session.email));
+  //     if (!verified) return <GateView slug={slug} step={query.step === "code" ? "code" : "email"} error={query.error} />;
+  //   }
 
+  // Still log a view when a verified viewer session happens to exist, so
+  // analytics keeps working for known viewers. Anonymous public reads are not
+  // logged (view_events.viewer_id is NOT NULL; no schema change here).
   const session = await readViewerSessionCookie();
-  if (!session) {
-    return <GateView slug={slug} step={query.step === "code" ? "code" : "email"} error={query.error} />;
+  if (session) {
+    const verified = await findVerifiedViewer(session.viewerId, session.email);
+    if (verified) {
+      await logViewEvent(session.viewerId, storybook.id);
+    }
   }
 
-  const verified = await findVerifiedViewer(session.viewerId, session.email);
-  if (!verified) {
-    return <GateView slug={slug} step={query.step === "code" ? "code" : "email"} error={query.error} />;
-  }
-
-  await logViewEvent(session.viewerId, storybook.id);
   return <BookViewer slug={slug} />;
 }
