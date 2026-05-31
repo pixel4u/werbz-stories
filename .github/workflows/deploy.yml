@@ -11,7 +11,7 @@ on:
 concurrency:
   # Never run two deploys at once; cancel an in-flight deploy if a newer push lands.
   group: deploy-production
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   deploy:
@@ -33,8 +33,12 @@ jobs:
 
             APP_DIR="/var/www/werbz-stories"
             PM2_APP="werbz-stories"
+            DEPLOY_LOCK="/tmp/werbz-stories.deploy.lock"
 
             echo "==> Deploying ${PM2_APP} from ${APP_DIR}"
+            echo "==> acquire host deploy lock ${DEPLOY_LOCK}"
+            exec 9>"${DEPLOY_LOCK}"
+            flock -w 900 9
             cd "${APP_DIR}"
 
             # Tools live in /usr/bin on this VPS; ensure it's on PATH for the
@@ -51,10 +55,12 @@ jobs:
             echo "==> guard next build lock"
             # If another deploy/build is still running, wait briefly instead of racing.
             # If no build process exists but a lock file remains, remove only the stale lock.
-            for i in $(seq 1 30); do
+            i=1
+            while [ "$i" -le 30 ]; do
               if pgrep -f "[n]ext build" >/dev/null 2>&1; then
                 echo "next build already running; waiting (attempt ${i}/30)..."
                 sleep 2
+                i=$((i+1))
               else
                 break
               fi
