@@ -254,18 +254,25 @@ function getAssetUrl(assetId){
 function normalizeStorybookFromApi(payload){
   const sb = payload?.storybook || payload || {};
   const pages = Array.isArray(sb.pages) ? sb.pages : [];
+  const firstTextBg = pages.find((p) => (p?.content?.kind || "") === "text" && p?.content?.backgroundAssetId)?.content?.backgroundAssetId || null;
+  const rawCoverAssetId = sb.coverAssetId || null;
+  const effectiveCoverAssetId =
+    rawCoverAssetId && !String(rawCoverAssetId).startsWith("asset-cover-")
+      ? rawCoverAssetId
+      : (firstTextBg || rawCoverAssetId);
   return {
     id: sb.id || DEFAULT_STORYBOOK.id,
     slug: sb.slug || storySlug,
     title: sb.title || DEFAULT_STORYBOOK.title,
     summary: sb.summary || "",
+    coverAssetId: effectiveCoverAssetId,
     author: DEFAULT_STORYBOOK.author,
     theme: sb.theme || DEFAULT_STORYBOOK.theme,
     cover: {
       kicker: "Stories",
       title: sb.title || DEFAULT_STORYBOOK.cover.title,
       author: DEFAULT_STORYBOOK.cover.author,
-      coverAssetId: sb.coverAssetId || null,
+      coverAssetId: effectiveCoverAssetId,
     },
     pages: pages.map((p, i) => {
       const c = p.content || {};
@@ -1807,6 +1814,10 @@ function updateUI(){
     const activeText = active ? `active leaf=${active.index ?? "settle"} type=${active.type} p=${active.leaf.progress.toFixed(3)} pending=${active.pendingFlipped ?? "-"}` : "active none";
     dbgEl.textContent =
       `PixiJS custom mesh page curl\n` +
+      `storybookId: ${STORYBOOK.id || "n/a"}\n` +
+      `slug: ${STORYBOOK.slug || "n/a"}\n` +
+      `coverAssetId: ${STORYBOOK.coverAssetId || "none"}\n` +
+      `pages: ${Array.isArray(STORYBOOK.pages) ? STORYBOOK.pages.length : 0}\n` +
       `state: ${state}\n` +
       `flipped: ${flipped}/${leaves.length}\n` +
       `${activeText}\n` +

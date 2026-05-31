@@ -17,6 +17,7 @@ import {
   updateStorybookMeta,
 } from "@/lib/studio-service";
 import { DeleteStorybookForm } from "@/components/studio/delete-storybook-form";
+import { CoverUploadForm } from "@/components/studio/cover-upload-form";
 
 async function loginAction(formData: FormData) {
   "use server";
@@ -93,6 +94,10 @@ function StatusBadge({ status }: { status: "draft" | "published" }) {
       {status}
     </span>
   );
+}
+
+function isPlaceholderCoverAsset(assetId: string | null): boolean {
+  return !!assetId && assetId.startsWith("asset-cover-");
 }
 
 function LoginView({ error }: { error?: string }) {
@@ -182,6 +187,11 @@ export default async function StudioPage({
               <p style={{ fontSize: 13, marginBottom: "0.8rem", color: "#666" }}>
                 slug: <code>{book.slug}</code> | coverAssetId: <code>{book.coverAssetId || "none"}</code> | pages: {book.pageCount} | views: {book.viewCount} | updated: {new Date(book.updatedAt).toLocaleString()}
               </p>
+              {isPlaceholderCoverAsset(book.coverAssetId) ? (
+                <p style={{ margin: "0 0 0.8rem", color: "#92400e", background: "#fffbeb", border: "1px solid #fcd34d", borderRadius: 8, padding: "0.45rem 0.6rem", fontSize: 13 }}>
+                  This cover uses a seed placeholder asset. Upload/select a real cover image to show it on the closed book.
+                </p>
+              ) : null}
 
               <form action={updateStorybookAction} style={{ display: "grid", gap: "0.5rem", marginBottom: "0.7rem" }}>
                 <input type="hidden" name="id" value={book.id} />
@@ -202,6 +212,10 @@ export default async function StudioPage({
                   Save Metadata
                 </button>
               </form>
+
+              <div style={{ marginBottom: "0.8rem" }}>
+                <CoverUploadForm storybookId={book.id} currentAssetId={book.coverAssetId || ""} />
+              </div>
 
               <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                 <Link

@@ -475,6 +475,51 @@ export async function uploadImageAssetForPage(input: {
   return { assetId };
 }
 
+export async function uploadCoverAssetForStorybook(input: {
+  storybookId: string;
+  fileName: string;
+  mimeType: string;
+  bytes: Buffer;
+  width?: number;
+  height?: number;
+}): Promise<{ assetId: string }> {
+  const db = getDb();
+  if (!ALLOWED_IMAGE_MIME_TYPES.has(input.mimeType)) {
+    throw new Error("Unsupported image type");
+  }
+
+  const storybookRows = await db.select().from(storybooks).where(eq(storybooks.id, input.storybookId)).limit(1);
+  const storybook = storybookRows[0];
+  if (!storybook) throw new Error("Storybook not found");
+
+  const assetId = `asset-upload-${randomUUID()}`;
+  const ext = extensionForMimeType(input.mimeType);
+  const storageKey = `${assetId}${ext}`;
+  const filePath = join(uploadsDir(), storageKey);
+
+  await mkdir(uploadsDir(), { recursive: true });
+  await writeFile(filePath, input.bytes);
+
+  await db.insert(assets).values({
+    id: assetId,
+    storageKey,
+    mimeType: input.mimeType,
+    bytes: input.bytes.length,
+    width: input.width ?? null,
+    height: input.height ?? null,
+  });
+
+  await db
+    .update(storybooks)
+    .set({
+      coverAssetId: assetId,
+      updatedAt: new Date(),
+    })
+    .where(eq(storybooks.id, input.storybookId));
+
+  return { assetId };
+}
+
 // Remove a page's photo. For text pages this clears the optional background
 // photo; for image pages it blanks the asset (the page then shows a placeholder
 // until a new image is uploaded).

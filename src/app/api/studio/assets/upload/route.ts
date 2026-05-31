@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { isStudioAuthenticated } from "@/lib/studio-auth";
-import { uploadImageAssetForPage } from "@/lib/studio-service";
+import { uploadCoverAssetForStorybook, uploadImageAssetForPage } from "@/lib/studio-service";
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
@@ -22,10 +22,11 @@ export async function POST(request: Request) {
   const storybookId = String(formData.get("storybookId") ?? "").trim();
   const pageId = String(formData.get("pageId") ?? "").trim();
   const targetRaw = String(formData.get("target") ?? "").trim();
-  const target = targetRaw === "text-background" ? "text-background" : targetRaw === "page-image" ? "page-image" : undefined;
+  const target =
+    targetRaw === "text-background" ? "text-background" : targetRaw === "page-image" ? "page-image" : targetRaw === "storybook-cover" ? "storybook-cover" : undefined;
   const file = formData.get("file");
 
-  if (!storybookId || !pageId || !(file instanceof File)) {
+  if (!storybookId || !(file instanceof File)) {
     return NextResponse.json({ error: "Missing upload fields" }, { status: 400 });
   }
 
@@ -40,6 +41,22 @@ export async function POST(request: Request) {
   const bytes = Buffer.from(await file.arrayBuffer());
 
   try {
+    if (target === "storybook-cover") {
+      const result = await uploadCoverAssetForStorybook({
+        storybookId,
+        fileName: file.name,
+        mimeType: file.type,
+        bytes,
+        width: parseIntField(formData.get("width")),
+        height: parseIntField(formData.get("height")),
+      });
+      return NextResponse.json({ ok: true, assetId: result.assetId });
+    }
+
+    if (!pageId) {
+      return NextResponse.json({ error: "Missing pageId for page asset upload" }, { status: 400 });
+    }
+
     const result = await uploadImageAssetForPage({
       storybookId,
       pageId,
