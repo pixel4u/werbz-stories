@@ -55,9 +55,15 @@ jobs:
             echo "==> guard next build lock"
             # If another deploy/build is still running, wait briefly instead of racing.
             # If no build process exists but a lock file remains, remove only the stale lock.
+            is_next_build_running() {
+              # Match only real Node/Next build processes.
+              # Avoid false positives from this SSH wrapper command text.
+              ps -eo pid=,comm=,args= | awk '$2=="node" && $0 ~ /next[[:space:]]+build/ { found=1 } END { exit(found ? 0 : 1) }'
+            }
+
             i=1
             while [ "$i" -le 30 ]; do
-              if pgrep -f "[n]ext build" >/dev/null 2>&1; then
+              if is_next_build_running; then
                 echo "next build already running; waiting (attempt ${i}/30)..."
                 sleep 2
                 i=$((i+1))
@@ -66,9 +72,9 @@ jobs:
               fi
             done
 
-            if pgrep -f "[n]ext build" >/dev/null 2>&1; then
+            if is_next_build_running; then
               echo "ERROR: next build is still running after wait window."
-              pgrep -fa "[n]ext build" || true
+              ps -eo pid=,comm=,args= | awk '$2=="node" && $0 ~ /next[[:space:]]+build/ { print }' || true
               exit 1
             fi
 
