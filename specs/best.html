@@ -1362,25 +1362,27 @@ function resize(){
   const isPhone = vw < 560;
   const isShort = vh < 620;
 
-  // Keep only minimal safe margins. Controls float above the scene, so they
-  // should not force the book to feel tiny.
-  const sideMargin = isPhone ? 10 : 22;
-  const topMargin = isPhone ? 30 : 38;
-  const bottomMargin = isShort ? 56 : isPhone ? 76 : 88;
+  // The book should fill the screen viewport. Controls (nav arrows, page dots,
+  // title) float above the scene, so the book is allowed to extend behind them
+  // — keep margins tiny so the open spread is as large as the viewport allows.
+  const sideMargin = isPhone ? 8 : 14;
+  const topMargin = isPhone ? 16 : 20;
+  const bottomMargin = isShort ? 24 : isPhone ? 40 : 28;
 
   const availableW = Math.max(220, vw - sideMargin * 2);
   const availableH = Math.max(260, vh - topMargin - bottomMargin);
 
   // The spread is 2 pages wide. Each page ratio is W:H = 1:1.42.
-  // Fit by whichever viewport dimension is tighter.
+  // Fit by whichever viewport dimension is tighter so the whole spread is
+  // visible and as large as possible (fills the viewport on the tight axis).
   const pageByWidth = availableW / 2;
   const pageByHeight = availableH / 1.42;
 
   PAGE_W = Math.min(pageByWidth, pageByHeight);
 
-  // No conservative desktop cap: large screens should show a large beautiful book.
-  // Only cap extreme sizes so textures/interaction stay sane.
-  PAGE_W = Math.min(PAGE_W, 680);
+  // Allow the book to grow large on big screens; only clamp extremes so
+  // textures/interaction stay sane.
+  PAGE_W = Math.min(PAGE_W, 1100);
   PAGE_W = Math.max(PAGE_W, isPhone ? 132 : 170);
   PAGE_H = PAGE_W * 1.42;
 
