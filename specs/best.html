@@ -302,6 +302,10 @@ function normalizeStorybookFromApi(payload){
           align: c.align || (c.center ? "center" : "left"),
           src: c.src || c.assetId || null,
           assetId: c.assetId || null,
+          // Text pages carry their photo as backgroundAssetId — must be preserved
+          // so the reader loads and draws it (Studio uploads write this field).
+          backgroundAssetId: c.backgroundAssetId || null,
+          backgroundFit: c.backgroundFit || "cover",
           poster: c.poster || null,
           caption: c.caption || "",
           label: c.label || (c.kind === "embed" ? "Embed" : ""),
