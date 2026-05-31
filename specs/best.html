@@ -265,6 +265,7 @@ function normalizeStorybookFromApi(payload){
       kicker: "Stories",
       title: sb.title || DEFAULT_STORYBOOK.cover.title,
       author: DEFAULT_STORYBOOK.cover.author,
+      coverAssetId: sb.coverAssetId || null,
     },
     pages: pages.map((p, i) => {
       const c = p.content || {};
@@ -395,6 +396,7 @@ function pairFacesIntoLeaves(faces){
 
 function getFaceAssetId(face){
   const c = face?.data || {};
+  if (face?.type === "cover-front") return c.coverAssetId || null;
   if (face?.type !== "content") return null;
   if (c.kind === "image") return c.assetId || c.src || null;
   if (c.kind === "video" || c.kind === "embed") return c.poster || null;
@@ -477,11 +479,11 @@ function drawDebugOverlayOnFace(ctx, w, h, face, side){
 function drawFaceContent(ctx,w,h,face,side,bgImage){
 
   if(face.type === "cover-front"){
-    drawCover(ctx,w,h,face.data,false);
+    drawCover(ctx,w,h,face.data,false,bgImage);
     return;
   }
   if(face.type === "cover-back"){
-    drawCover(ctx,w,h,face.data,true);
+    drawCover(ctx,w,h,face.data,true,bgImage);
     return;
   }
   if(face.type === "endpaper"){
@@ -640,14 +642,24 @@ function drawEndpaper(ctx,w,h){
   ctx.restore();
 }
 
-function drawCover(ctx,w,h,data,isBack){
+function drawCover(ctx,w,h,data,isBack,bgImage){
+  if (bgImage) {
+    fitImage(ctx,w,h,bgImage,"cover");
+    const scrim = ctx.createLinearGradient(0,0,0,h);
+    scrim.addColorStop(0, "rgba(0,0,0,.45)");
+    scrim.addColorStop(1, "rgba(0,0,0,.5)");
+    ctx.fillStyle = scrim;
+    ctx.fillRect(0,0,w,h);
+  }
   const g = ctx.createRadialGradient(w*.28,h*.12,40,w*.5,h*.55,h*.8);
   g.addColorStop(0,"#2c3a66");
   g.addColorStop(.33,"#243056");
   g.addColorStop(.80,"#161d3a");
   g.addColorStop(1,"#0d1226");
   ctx.fillStyle = g;
+  ctx.globalAlpha = bgImage ? 0.62 : 1;
   ctx.fillRect(0,0,w,h);
+  ctx.globalAlpha = 1;
 
   // Cloth grain
   ctx.globalAlpha = .10;
