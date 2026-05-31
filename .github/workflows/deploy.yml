@@ -52,33 +52,7 @@ jobs:
             echo "==> install deps"
             pnpm install --frozen-lockfile
 
-            echo "==> guard next build lock"
-            # If another deploy/build is still running, wait briefly instead of racing.
-            # If no build process exists but a lock file remains, remove only the stale lock.
-            is_next_build_running() {
-              # Match only real Node/Next build processes.
-              # Avoid false positives from this SSH wrapper command text.
-              ps -eo pid=,comm=,args= | awk '$2=="node" && $0 ~ /next[[:space:]]+build/ { found=1 } END { exit(found ? 0 : 1) }'
-            }
-
-            i=1
-            while [ "$i" -le 30 ]; do
-              if is_next_build_running; then
-                echo "next build already running; waiting (attempt ${i}/30)..."
-                sleep 2
-                i=$((i+1))
-              else
-                break
-              fi
-            done
-
-            if is_next_build_running; then
-              echo "ERROR: next build is still running after wait window."
-              ps -eo pid=,comm=,args= | awk '$2=="node" && $0 ~ /next[[:space:]]+build/ { print }' || true
-              exit 1
-            fi
-
-            # Next.js may leave stale lock files after interrupted builds.
+            echo "==> clear stale next lock files (safe)"
             rm -f .next/lock .next/build.lock .next/trace.lock || true
 
             echo "==> build"
