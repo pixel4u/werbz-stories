@@ -15,6 +15,8 @@ export interface StudioStorybookRow {
   summary: string | null;
   status: "draft" | "published";
   coverAssetId: string | null;
+  coverPageId: string | null;
+  endPageId: string | null;
   updatedAt: Date;
   pageCount: number;
   viewCount: number;
@@ -31,6 +33,11 @@ export interface StudioPageRow {
 export interface StudioStorybookDetail extends StudioStorybookRow {
   theme: Record<string, unknown> | null;
   pages: StudioPageRow[];
+}
+
+interface StoryStructurePointers {
+  coverPageId: string | null;
+  endPageId: string | null;
 }
 
 const ALLOWED_IMAGE_MIME_TYPES = new Set([
@@ -95,6 +102,8 @@ export async function listStudioStorybooks(): Promise<StudioStorybookRow[]> {
       summary: storybooks.summary,
       status: storybooks.status,
       coverAssetId: storybooks.coverAssetId,
+      coverPageId: storybooks.coverPageId,
+      endPageId: storybooks.endPageId,
       updatedAt: storybooks.updatedAt,
       pageCount: sql<number>`count(distinct ${pages.id})::int`,
       viewCount: sql<number>`count(distinct ${viewEvents.id})::int`,
@@ -109,6 +118,8 @@ export async function listStudioStorybooks(): Promise<StudioStorybookRow[]> {
       storybooks.summary,
       storybooks.status,
       storybooks.coverAssetId,
+      storybooks.coverPageId,
+      storybooks.endPageId,
       storybooks.updatedAt
     )
     .orderBy(asc(storybooks.title));
@@ -125,6 +136,7 @@ export async function getStudioStorybookById(id: string): Promise<StudioStoryboo
     .limit(1);
   const storybook = rows[0];
   if (!storybook) return null;
+  const pointers = await ensureStorybookStructure(id);
 
   const pageRows = await db
     .select()
@@ -137,6 +149,12 @@ export async function getStudioStorybookById(id: string): Promise<StudioStoryboo
     .from(viewEvents)
     .where(eq(viewEvents.storybookId, id));
 
+  const cover = pointers.coverPageId ? pageRows.find((p) => p.id === pointers.coverPageId) : undefined;
+  const end = pointers.endPageId ? pageRows.find((p) => p.id === pointers.endPageId) : undefined;
+  const excluded = new Set<string>([cover?.id ?? "", end?.id ?? ""]);
+  const middle = pageRows.filter((p) => !excluded.has(p.id)).sort((a, b) => a.position - b.position);
+  const ordered = [...(cover ? [cover] : []), ...middle, ...(end ? [end] : [])];
+
   return {
     id: storybook.id,
     title: storybook.title,
@@ -144,14 +162,16 @@ export async function getStudioStorybookById(id: string): Promise<StudioStoryboo
     summary: storybook.summary,
     status: storybook.status,
     coverAssetId: storybook.coverAssetId,
+    coverPageId: pointers.coverPageId,
+    endPageId: pointers.endPageId,
     updatedAt: storybook.updatedAt,
-    pageCount: pageRows.length,
+    pageCount: ordered.length,
     viewCount: Number(viewCountRows[0]?.count ?? 0),
     theme: (storybook.theme as Record<string, unknown> | null) ?? null,
-    pages: pageRows.map((page) => ({
+    pages: ordered.map((page, idx) => ({
       id: page.id,
       storybookId: page.storybookId,
-      position: page.position,
+      position: idx,
       side: page.side,
       content: PageContent.parse(page.content),
     })),
@@ -242,16 +262,32 @@ export async function duplicateStorybook(id: string): Promise<void> {
     .orderBy(asc(pages.position));
 
   if (sourcePages.length > 0) {
-    await db.insert(pages).values(
-      sourcePages.map((page) => ({
-        id: `${page.id}-copy-${randomUUID().slice(0, 8)}`,
+    const idMap = new Map<string, string>();
+    const copiedPages = sourcePages.map((page) => {
+      const nextId = `${page.id}-copy-${randomUUID().slice(0, 8)}`;
+      idMap.set(page.id, nextId);
+      return {
+        id: nextId,
         storybookId: newId,
         position: page.position,
         side: page.side,
         content: page.content,
-      }))
-    );
+      };
+    });
+    await db.insert(pages).values(copiedPages);
+
+    await db
+      .update(storybooks)
+      .set({
+        coverPageId: source.coverPageId ? idMap.get(source.coverPageId) ?? null : null,
+        endPageId: source.endPageId ? idMap.get(source.endPageId) ?? null : null,
+        updatedAt: new Date(),
+      })
+      .where(eq(storybooks.id, newId));
   }
+
+  await ensureStorybookStructure(newId);
+  await normalizePagePositions(newId);
 }
 
 function defaultContentForType(kind: "text" | "image" | "video" | "embed"): PageContentType {
@@ -292,15 +328,70 @@ function defaultContentForType(kind: "text" | "image" | "video" | "embed"): Page
 
 async function normalizePagePositions(storybookId: string): Promise<void> {
   const db = getDb();
+  const storybookRows = await db
+    .select({ coverPageId: storybooks.coverPageId, endPageId: storybooks.endPageId })
+    .from(storybooks)
+    .where(eq(storybooks.id, storybookId))
+    .limit(1);
+  const pointers = storybookRows[0];
+
   const rows = await db
+    .select({ id: pages.id, position: pages.position })
+    .from(pages)
+    .where(eq(pages.storybookId, storybookId))
+    .orderBy(asc(pages.position));
+
+  const cover = pointers?.coverPageId ? rows.find((r) => r.id === pointers.coverPageId) : undefined;
+  const end = pointers?.endPageId ? rows.find((r) => r.id === pointers.endPageId) : undefined;
+  const excluded = new Set<string>([cover?.id ?? "", end?.id ?? ""]);
+  const middle = rows.filter((r) => !excluded.has(r.id));
+  const normalizedOrder = [...(cover ? [cover] : []), ...middle, ...(end ? [end] : [])];
+
+  for (let i = 0; i < normalizedOrder.length; i++) {
+    await db.update(pages).set({ position: i }).where(eq(pages.id, normalizedOrder[i].id));
+  }
+}
+
+async function ensureStorybookStructure(storybookId: string): Promise<StoryStructurePointers> {
+  const db = getDb();
+  const bookRows = await db
+    .select({ coverPageId: storybooks.coverPageId, endPageId: storybooks.endPageId })
+    .from(storybooks)
+    .where(eq(storybooks.id, storybookId))
+    .limit(1);
+  const book = bookRows[0];
+  if (!book) throw new Error("Storybook not found");
+
+  const orderedPages = await db
     .select({ id: pages.id })
     .from(pages)
     .where(eq(pages.storybookId, storybookId))
     .orderBy(asc(pages.position));
 
-  for (let i = 0; i < rows.length; i++) {
-    await db.update(pages).set({ position: i }).where(eq(pages.id, rows[i].id));
+  let coverPageId = book.coverPageId;
+  let endPageId = book.endPageId;
+
+  if (orderedPages.length === 0) {
+    coverPageId = null;
+    endPageId = null;
+  } else {
+    const valid = new Set(orderedPages.map((p) => p.id));
+    if (!coverPageId || !valid.has(coverPageId)) {
+      coverPageId = orderedPages[0].id;
+    }
+    if (!endPageId || !valid.has(endPageId) || endPageId === coverPageId) {
+      endPageId = orderedPages.length > 1 ? orderedPages[orderedPages.length - 1].id : null;
+    }
   }
+
+  if (coverPageId !== book.coverPageId || endPageId !== book.endPageId) {
+    await db
+      .update(storybooks)
+      .set({ coverPageId, endPageId, updatedAt: new Date() })
+      .where(eq(storybooks.id, storybookId));
+  }
+
+  return { coverPageId, endPageId };
 }
 
 export async function addPage(
@@ -327,6 +418,7 @@ export async function addPage(
     content,
   });
 
+  await ensureStorybookStructure(storybookId);
   await normalizePagePositions(storybookId);
   await db.update(storybooks).set({ updatedAt: new Date() }).where(eq(storybooks.id, storybookId));
   return pageId;
@@ -354,6 +446,7 @@ export async function updatePage(input: {
     .set({ side: safeSide, content: safeContent })
     .where(eq(pages.id, input.pageId));
 
+  await ensureStorybookStructure(row.storybookId);
   await normalizePagePositions(row.storybookId);
   await db.update(storybooks).set({ updatedAt: new Date() }).where(eq(storybooks.id, row.storybookId));
 }
@@ -369,6 +462,7 @@ export async function deletePage(pageId: string): Promise<void> {
   if (!row) return;
 
   await db.delete(pages).where(eq(pages.id, pageId));
+  await ensureStorybookStructure(row.storybookId);
   await normalizePagePositions(row.storybookId);
   await db.update(storybooks).set({ updatedAt: new Date() }).where(eq(storybooks.id, row.storybookId));
 }
@@ -395,6 +489,7 @@ export async function duplicatePage(pageId: string): Promise<string | null> {
     content: source.content,
   });
 
+  await ensureStorybookStructure(source.storybookId);
   await normalizePagePositions(source.storybookId);
   await db.update(storybooks).set({ updatedAt: new Date() }).where(eq(storybooks.id, source.storybookId));
   return insertedId;
@@ -416,6 +511,7 @@ export async function movePageUp(pageId: string): Promise<void> {
 
   await db.update(pages).set({ position: page.position }).where(eq(pages.id, prev.id));
   await db.update(pages).set({ position: page.position - 1 }).where(eq(pages.id, page.id));
+  await ensureStorybookStructure(page.storybookId);
   await normalizePagePositions(page.storybookId);
   await db.update(storybooks).set({ updatedAt: new Date() }).where(eq(storybooks.id, page.storybookId));
 }
@@ -436,6 +532,7 @@ export async function movePageDown(pageId: string): Promise<void> {
 
   await db.update(pages).set({ position: page.position }).where(eq(pages.id, next.id));
   await db.update(pages).set({ position: page.position + 1 }).where(eq(pages.id, page.id));
+  await ensureStorybookStructure(page.storybookId);
   await normalizePagePositions(page.storybookId);
   await db.update(storybooks).set({ updatedAt: new Date() }).where(eq(storybooks.id, page.storybookId));
 }

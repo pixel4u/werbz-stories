@@ -48,6 +48,8 @@ export const storybooks = pgTable(
     title: text("title").notNull(),
     summary: text("summary"),
     coverAssetId: text("cover_asset_id").references(() => assets.id, { onDelete: "set null" }),
+    coverPageId: text("cover_page_id"),
+    endPageId: text("end_page_id"),
     status: storybookStatus("status").notNull().default("draft"),
     theme: jsonb("theme"), // optional per-book Book config (your Copy-config JSON)
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

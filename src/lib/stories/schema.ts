@@ -130,6 +130,27 @@ export const Storybook = z.object({
 });
 export type Storybook = z.infer<typeof Storybook>;
 
+/**
+ * Canonical structure used across Studio + Reader:
+ * - `cover` and `end` are explicit single-page slots
+ * - `pages` are only the ordered middle story pages
+ */
+export const CanonicalStorybook = z.object({
+  id: z.string(),
+  slug: z.string().regex(/^[a-z0-9-]+$/),
+  title: z.string().min(1).max(200),
+  summary: z.string().max(500).optional(),
+  coverAssetId: z.string().optional(),
+  status: StorybookStatus.default("draft"),
+  theme: z.record(z.string(), z.any()).optional(),
+  cover: Page.optional(),
+  pages: z.array(Page),
+  end: Page.optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type CanonicalStorybook = z.infer<typeof CanonicalStorybook>;
+
 /* ────────────────────────────────────────────────────────────
    API SHAPES
    What the Library list endpoint returns (lightweight — no pages),
@@ -150,4 +171,8 @@ export type StorybookListItem = z.infer<typeof StorybookListItem>;
 /** Validate anything coming from the DB / API before the Book renders it. */
 export function parseStorybook(input: unknown): Storybook {
   return Storybook.parse(input);
+}
+
+export function parseCanonicalStorybook(input: unknown): CanonicalStorybook {
+  return CanonicalStorybook.parse(input);
 }

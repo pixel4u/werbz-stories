@@ -253,7 +253,19 @@ function getAssetUrl(assetId){
 
 function normalizeStorybookFromApi(payload){
   const sb = payload?.storybook || payload || {};
-  const pages = Array.isArray(sb.pages) ? sb.pages : [];
+  // Phase 1 canonical payload:
+  //  - sb.cover (optional page)
+  //  - sb.pages[] (middle story pages)
+  //  - sb.end (optional page)
+  // Legacy fallback keeps working for older payloads.
+  let pages = [];
+  if (sb && typeof sb === "object" && ("cover" in sb || "end" in sb)) {
+    if (sb.cover) pages.push(sb.cover);
+    if (Array.isArray(sb.pages)) pages.push(...sb.pages);
+    if (sb.end) pages.push(sb.end);
+  } else {
+    pages = Array.isArray(sb.pages) ? sb.pages : [];
+  }
   const firstTextBg = pages.find((p) => (p?.content?.kind || "") === "text" && p?.content?.backgroundAssetId)?.content?.backgroundAssetId || null;
   const rawCoverAssetId = sb.coverAssetId || null;
   const effectiveCoverAssetId =

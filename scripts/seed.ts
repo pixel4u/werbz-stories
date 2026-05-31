@@ -82,6 +82,17 @@ async function main() {
     );
   }
 
+  const coverPageId = storybook.pages[0]?.id ?? null;
+  const endPageId = storybook.pages.length > 1 ? storybook.pages[storybook.pages.length - 1]?.id ?? null : null;
+  await db
+    .update(storybooks)
+    .set({
+      coverPageId,
+      endPageId,
+      updatedAt: new Date(storybook.updatedAt),
+    })
+    .where(eq(storybooks.id, storybook.id));
+
   await db.execute(sql`select 1`);
   console.log(`Seeded storybook: ${storybook.slug}`);
 }
