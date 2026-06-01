@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 
-import { getAssetUrl } from "@/lib/assets";
+import { getAssetUrl } from "@/lib/asset-url";
 
 interface CoverUploadFormProps {
   storybookId: string;
@@ -112,10 +112,11 @@ export function CoverUploadForm({ storybookId, currentAssetId }: CoverUploadForm
         accept="image/jpeg,image/png,image/webp,image/gif"
         disabled={busy}
         onChange={async (event) => {
+          const input = event.currentTarget;
           const file = event.target.files?.[0];
           if (!file) return;
           await upload(file);
-          event.currentTarget.value = "";
+          input.value = "";
         }}
       />
       {previewUrl ? (

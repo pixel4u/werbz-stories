@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { getAssetUrl } from "@/lib/assets";
+import { getAssetUrl } from "@/lib/asset-url";
 import { listPublishedStorybooks } from "@/lib/stories/repository";
 
 export const dynamic = "force-dynamic";

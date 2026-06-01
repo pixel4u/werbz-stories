@@ -1,11 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
-import { extname, join } from "node:path";
 
 import { and, asc, eq, sql } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
-import { assets, pages, storybooks, viewEvents } from "@/db/schema";
+import { pages, storybooks, viewEvents } from "@/db/schema";
+import { saveAssetFromBuffer } from "@/lib/assets";
 import { PageContent, PageSide, type PageContent as PageContentType, type PageSide as PageSideType } from "@/lib/stories/schema";
 
 export interface StudioStorybookRow {
@@ -46,18 +45,6 @@ const ALLOWED_IMAGE_MIME_TYPES = new Set([
   "image/webp",
   "image/gif",
 ]);
-
-function uploadsDir(): string {
-  return process.env.UPLOADS_DIR || join(process.cwd(), "uploads");
-}
-
-function extensionForMimeType(mimeType: string): string {
-  if (mimeType === "image/jpeg") return ".jpg";
-  if (mimeType === "image/png") return ".png";
-  if (mimeType === "image/webp") return ".webp";
-  if (mimeType === "image/gif") return ".gif";
-  return extname(mimeType) || ".bin";
-}
 
 function slugify(input: string): string {
   const slug = input
@@ -614,21 +601,12 @@ export async function uploadImageAssetForPage(input: {
     throw new Error("Background photo is only available on text pages");
   }
 
-  const assetId = `asset-upload-${randomUUID()}`;
-  const ext = extensionForMimeType(input.mimeType);
-  const storageKey = `${assetId}${ext}`;
-  const filePath = join(uploadsDir(), storageKey);
-
-  await mkdir(uploadsDir(), { recursive: true });
-  await writeFile(filePath, input.bytes);
-
-  await db.insert(assets).values({
-    id: assetId,
-    storageKey,
+  const { assetId } = await saveAssetFromBuffer({
+    buffer: input.bytes,
+    originalName: input.fileName,
     mimeType: input.mimeType,
-    bytes: input.bytes.length,
-    width: input.width ?? null,
-    height: input.height ?? null,
+    width: input.width,
+    height: input.height,
   });
 
   const nextContent =
@@ -662,21 +640,12 @@ export async function uploadCoverAssetForStorybook(input: {
   const storybook = storybookRows[0];
   if (!storybook) throw new Error("Storybook not found");
 
-  const assetId = `asset-upload-${randomUUID()}`;
-  const ext = extensionForMimeType(input.mimeType);
-  const storageKey = `${assetId}${ext}`;
-  const filePath = join(uploadsDir(), storageKey);
-
-  await mkdir(uploadsDir(), { recursive: true });
-  await writeFile(filePath, input.bytes);
-
-  await db.insert(assets).values({
-    id: assetId,
-    storageKey,
+  const { assetId } = await saveAssetFromBuffer({
+    buffer: input.bytes,
+    originalName: input.fileName,
     mimeType: input.mimeType,
-    bytes: input.bytes.length,
-    width: input.width ?? null,
-    height: input.height ?? null,
+    width: input.width,
+    height: input.height,
   });
 
   await db

@@ -20,8 +20,9 @@ import { DeletePageForm } from "@/components/studio/delete-page-form";
 import { ImageUploadForm } from "@/components/studio/image-upload-form";
 import { CoverUploadForm } from "@/components/studio/cover-upload-form";
 import { BulkUploadForm } from "@/components/studio/bulk-upload-form";
+import { ContactSheetUploadForm } from "@/components/studio/contact-sheet-upload-form";
 import { CopyLinkButton } from "@/components/studio/copy-link-button";
-import { getAssetUrl } from "@/lib/assets";
+import { getAssetUrl } from "@/lib/asset-url";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -673,7 +674,10 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
               <h2 style={{ margin: 0, fontSize: 18 }}>Upload Full Book</h2>
               <Link href={`/studio/${storybook.id}${selectedPage ? `?page=${encodeURIComponent(selectedPage.id)}` : ""}`} style={{ padding: "0.45rem 0.75rem", borderRadius: 8, border: "1px solid #d1d5db", textDecoration: "none", color: "inherit" }}>Close</Link>
             </div>
-            <BulkUploadForm storybookId={storybook.id} />
+            <div style={{ display: "grid", gap: "0.85rem" }}>
+              <BulkUploadForm storybookId={storybook.id} />
+              <ContactSheetUploadForm storybookId={storybook.id} />
+            </div>
           </div>
         </div>
       ) : null}
