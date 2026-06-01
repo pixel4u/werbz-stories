@@ -220,6 +220,34 @@ export async function getPublishedLegacyStorybookBySlug(slug: string): Promise<S
   return storybook.status === "published" ? storybook : null;
 }
 
+// Library-card aspect ratio (width / height): theme override first, else the
+// cover asset's real pixel dimensions. Undefined when unknown (card falls back
+// to a default shape). No schema change — reuses assets.width/height.
+async function deriveListItemAspectRatio(row: {
+  theme: unknown;
+  coverAssetId: string | null;
+}): Promise<number | undefined> {
+  if (row.theme && typeof row.theme === "object") {
+    const t = row.theme as Record<string, unknown>;
+    if (typeof t.pageAspectRatio === "number" && Number.isFinite(t.pageAspectRatio) && t.pageAspectRatio > 0) {
+      return t.pageAspectRatio;
+    }
+  }
+  if (!row.coverAssetId) return undefined;
+  const db = getDb();
+  const a = await db
+    .select({ width: assets.width, height: assets.height })
+    .from(assets)
+    .where(eq(assets.id, row.coverAssetId))
+    .limit(1);
+  const meta = a[0];
+  if (meta && meta.width && meta.height && meta.width > 0 && meta.height > 0) {
+    const ratio = meta.width / meta.height;
+    if (Number.isFinite(ratio) && ratio > 0) return ratio;
+  }
+  return undefined;
+}
+
 export async function listPublishedStorybooks(): Promise<StorybookListItemType[]> {
   const db = getDb();
   const rows = await db
@@ -228,15 +256,18 @@ export async function listPublishedStorybooks(): Promise<StorybookListItemType[]
     .where(eq(storybooks.status, "published"))
     .orderBy(asc(storybooks.title));
 
-  return rows.map((row) =>
-    StorybookListItem.parse({
-      id: row.id,
-      slug: row.slug,
-      title: row.title,
-      summary: row.summary ?? undefined,
-      coverAssetId: row.coverAssetId ?? undefined,
-      status: row.status,
-      updatedAt: toIsoString(row.updatedAt),
-    })
+  return Promise.all(
+    rows.map(async (row) =>
+      StorybookListItem.parse({
+        id: row.id,
+        slug: row.slug,
+        title: row.title,
+        summary: row.summary ?? undefined,
+        coverAssetId: row.coverAssetId ?? undefined,
+        status: row.status,
+        updatedAt: toIsoString(row.updatedAt),
+        pageAspectRatio: await deriveListItemAspectRatio({ theme: row.theme, coverAssetId: row.coverAssetId }),
+      })
+    )
   );
 }

@@ -9,11 +9,26 @@ export const dynamic = "force-dynamic";
 // on the front face, a thick spine on the left, page-block edges on the right,
 // a soft top-light sheen, and a grounded drop shadow. Mimics the reader's book
 // look instead of a flat card.
-function BookCover({ slug, title, coverAssetId }: { slug: string; title: string; coverAssetId?: string }) {
+function BookCover({
+  slug,
+  title,
+  coverAssetId,
+  aspectRatio,
+}: {
+  slug: string;
+  title: string;
+  coverAssetId?: string;
+  aspectRatio?: number;
+}) {
   const coverUrl = getAssetUrl(coverAssetId || "asset-placeholder-cover");
+  // Size the book to its real cover shape: fixed width, height from the ratio
+  // (width / height). Clamp so extreme shapes still sit nicely on the shelf.
+  const STAGE_W = 220;
+  const ratio = aspectRatio && aspectRatio > 0 ? Math.min(Math.max(aspectRatio, 0.5), 2) : 220 / 300;
+  const stageH = Math.round(STAGE_W / ratio);
   return (
     <Link href={`/${slug}`} className="book-link" aria-label={title}>
-      <div className="book-stage">
+      <div className="book-stage" style={{ width: STAGE_W, height: stageH }}>
         <div className="book">
           {/* page block edge (right) */}
           <div className="book-pages" aria-hidden />
@@ -48,7 +63,7 @@ export default async function HomePage() {
       ) : (
         <div className="shelf">
           {items.map((item) => (
-            <BookCover key={item.id} slug={item.slug} title={item.title} coverAssetId={item.coverAssetId} />
+            <BookCover key={item.id} slug={item.slug} title={item.title} coverAssetId={item.coverAssetId} aspectRatio={item.pageAspectRatio} />
           ))}
         </div>
       )}
@@ -82,8 +97,7 @@ export default async function HomePage() {
         .book-link { text-decoration: none; color: inherit; display: block; }
         .book-stage {
           position: relative;
-          width: 220px;
-          height: 300px;
+          /* width/height are set inline per book from its real aspect ratio */
           perspective: 1400px;
           margin: 0 auto;
         }

@@ -528,8 +528,10 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
                 return (
                   <div key={page.id} style={{ border: selected ? "2px solid #2563eb" : "1px solid #e2e8f0", borderRadius: 10, padding: "0.4rem", background: selected ? "#eff6ff" : "#fff" }}>
                     <Link href={`/studio/${storybook.id}?page=${encodeURIComponent(page.id)}`} style={{ display: "flex", gap: "0.55rem", alignItems: "center", textDecoration: "none", color: "inherit" }}>
-                      <div style={{ width: 46, height: 60, borderRadius: 6, border: "1px solid #cbd5e1", overflow: "hidden", background: "#f8fafc", display: "grid", placeItems: "center", flexShrink: 0 }}>
-                        {thumb ? <img src={thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <span style={{ fontSize: 18, color: "#94a3b8" }}>{pageKindIcon(page.content.kind)}</span>}
+                      {/* The thumbnail takes the image's real shape: fixed width, auto height
+                          (clamped) so square crops look square, wide look wide, tall look tall. */}
+                      <div style={{ width: 52, minHeight: 40, maxHeight: 84, borderRadius: 6, border: "1px solid #cbd5e1", overflow: "hidden", background: "#f8fafc", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                        {thumb ? <img src={thumb} alt="" style={{ width: "100%", height: "auto", maxHeight: 84, objectFit: "contain", display: "block" }} /> : <span style={{ fontSize: 18, color: "#94a3b8", padding: "0.6rem 0" }}>{pageKindIcon(page.content.kind)}</span>}
                       </div>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 700 }}>{label}</div>

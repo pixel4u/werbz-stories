@@ -167,6 +167,7 @@ export const StorybookListItem = Storybook.pick({
   coverAssetId: true,
   status: true,
   updatedAt: true,
+  pageAspectRatio: true, // page width / height, so the library card matches the book shape
 });
 export type StorybookListItem = z.infer<typeof StorybookListItem>;
 
