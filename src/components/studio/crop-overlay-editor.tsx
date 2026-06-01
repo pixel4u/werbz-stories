@@ -305,9 +305,11 @@ async function applyOcrToCards(args: {
 }
 
 function cropThumbStyle(sheetUrl: string, imageW: number, imageH: number, card: DetectedCard): CSSProperties {
-  const scale = Math.min(THUMB_W / card.box.width, THUMB_H / card.box.height);
-  const bgW = imageW * scale;
-  const bgH = imageH * scale;
+  // Use independent X/Y scaling so the thumbnail maps exactly to the selected crop bounds.
+  const scaleX = THUMB_W / card.box.width;
+  const scaleY = THUMB_H / card.box.height;
+  const bgW = imageW * scaleX;
+  const bgH = imageH * scaleY;
   return {
     width: THUMB_W,
     height: THUMB_H,
@@ -316,7 +318,7 @@ function cropThumbStyle(sheetUrl: string, imageW: number, imageH: number, card: 
     backgroundImage: `url(${sheetUrl})`,
     backgroundRepeat: "no-repeat",
     backgroundSize: `${bgW}px ${bgH}px`,
-    backgroundPosition: `${-card.box.x * scale}px ${-card.box.y * scale}px`,
+    backgroundPosition: `${-card.box.x * scaleX}px ${-card.box.y * scaleY}px`,
     backgroundColor: "#fff",
   };
 }
@@ -655,7 +657,7 @@ export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange,
           : null}
       </div>
 
-      <div style={{ marginTop: "0.65rem", display: "grid", gap: "0.35rem" }}>
+      {!isFullscreen ? <div style={{ marginTop: "0.65rem", display: "grid", gap: "0.35rem" }}>
         <div style={{ fontSize: 12, color: "#334155" }}>Detected {cards.length} pages</div>
         {coverCount === 0 ? <div style={{ fontSize: 12, color: "#b45309" }}>Warning: No Cover detected.</div> : null}
         {endCount === 0 ? <div style={{ fontSize: 12, color: "#b45309" }}>Warning: No End detected.</div> : null}
@@ -666,9 +668,9 @@ export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange,
         {unknownCount > 0 ? <div style={{ fontSize: 12, color: "#64748b" }}>Note: {unknownCount} unread boxes will use fallback visual order.</div> : null}
         {ranDetection && cards.length === 0 ? <div style={{ fontSize: 12, color: "#64748b" }}>We couldn’t detect pages clearly. Use Grid Fallback below.</div> : null}
         {error ? <div style={{ fontSize: 12, color: "#b91c1c" }}>{error}</div> : null}
-      </div>
+      </div> : null}
 
-      <div style={{ marginTop: "0.8rem", borderTop: "1px solid #e5e7eb", paddingTop: "0.75rem" }}>
+      {!isFullscreen ? <div style={{ marginTop: "0.8rem", borderTop: "1px solid #e5e7eb", paddingTop: "0.75rem" }}>
         <div style={{ fontWeight: 700, fontSize: 13, marginBottom: "0.5rem" }}>Grid Fallback</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr)) auto", gap: "0.45rem", alignItems: "end" }}>
           <label style={{ fontSize: 12 }}>Columns<input type="number" min={1} value={gridCols} onChange={(e) => setGridCols(Number.parseInt(e.target.value || "1", 10))} style={{ width: "100%", marginTop: 4, padding: "0.35rem", border: "1px solid #d1d5db", borderRadius: 6 }} /></label>
@@ -680,9 +682,9 @@ export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange,
         <p style={{ margin: "0.4rem 0 0", fontSize: 12, color: "#64748b" }}>
           Current grid settings will create <strong>{Math.max(1, Math.round(gridCols)) * Math.max(1, Math.round(gridRows))}</strong> crop boxes.
         </p>
-      </div>
+      </div> : null}
 
-      {orderedCards.length > 0 ? (
+      {!isFullscreen && orderedCards.length > 0 ? (
         <div style={{ marginTop: "0.85rem", borderTop: "1px solid #e5e7eb", paddingTop: "0.8rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
             <strong style={{ fontSize: 13 }}>Review Strip</strong>
@@ -734,12 +736,23 @@ export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange,
           <div style={{ background: "#fff", borderRadius: 14, padding: "0.8rem", display: "grid", gridTemplateRows: "auto 1fr", overflow: "hidden" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
               <strong>Full-screen Crop Frame Editor</strong>
-              <button type="button" onClick={() => setIsFullscreen(false)} style={{ padding: "0.45rem 0.75rem", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer" }}>
-                Close
-              </button>
+              <div style={{ display: "flex", gap: "0.45rem", alignItems: "center" }}>
+                <button type="button" onClick={runDetection} disabled={busy} style={{ padding: "0.4rem 0.65rem", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                  {busy ? "Detecting..." : "Run detection"}
+                </button>
+                <button type="button" onClick={addCardManually} style={{ padding: "0.4rem 0.65rem", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer", fontSize: 12 }}>
+                  Add frame
+                </button>
+                <button type="button" onClick={applyProposedSort} style={{ padding: "0.4rem 0.65rem", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer", fontSize: 12 }}>
+                  Re-sort
+                </button>
+                <button type="button" onClick={() => setIsFullscreen(false)} style={{ padding: "0.45rem 0.75rem", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer" }}>
+                  Close
+                </button>
+              </div>
             </div>
-            <div style={{ overflow: "auto" }}>
-              <div style={{ minHeight: "80vh" }}>
+            <div style={{ overflow: "hidden", display: "grid", gridTemplateColumns: "minmax(0,1fr) 420px", gap: "0.8rem" }}>
+              <div style={{ overflow: "auto", minHeight: "80vh" }}>
                 <div style={{ position: "relative", width: "100%", border: "1px solid #e5e7eb", borderRadius: 8, overflow: "hidden", background: "#f8fafc" }}>
                   <img src={sheetUrl} alt="Contact sheet full size" onLoad={(event) => measureDisplayedImageFromElement(event.target as HTMLImageElement)} style={{ width: "100%", height: "auto", display: "block" }} />
                   {displaySize.width > 0
@@ -776,6 +789,90 @@ export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange,
                       })
                     : null}
                 </div>
+              </div>
+              <div style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: "0.7rem", overflow: "auto", background: "#fff" }}>
+                <div style={{ marginBottom: "0.6rem", display: "grid", gap: "0.35rem" }}>
+                  <div style={{ fontSize: 12, color: "#334155" }}>Detected {cards.length} pages</div>
+                  {coverCount === 0 ? <div style={{ fontSize: 12, color: "#b45309" }}>Warning: No Cover detected.</div> : null}
+                  {endCount === 0 ? <div style={{ fontSize: 12, color: "#b45309" }}>Warning: No End detected.</div> : null}
+                  {coverCount > 1 ? <div style={{ fontSize: 12, color: "#b45309" }}>Warning: Duplicate Cover detected.</div> : null}
+                  {endCount > 1 ? <div style={{ fontSize: 12, color: "#b45309" }}>Warning: Duplicate End detected.</div> : null}
+                  {missingPageNumbers > 0 ? <div style={{ fontSize: 12, color: "#b45309" }}>Warning: {missingPageNumbers} page cards are missing page numbers.</div> : null}
+                  {lowConfidenceCount > 0 ? <div style={{ fontSize: 12, color: "#b45309" }}>Warning: {lowConfidenceCount} labels have low OCR confidence.</div> : null}
+                  {unknownCount > 0 ? <div style={{ fontSize: 12, color: "#64748b" }}>Note: {unknownCount} unread boxes will use fallback visual order.</div> : null}
+                  {ranDetection && cards.length === 0 ? <div style={{ fontSize: 12, color: "#64748b" }}>We couldn’t detect pages clearly. Use Grid Fallback below.</div> : null}
+                  {error ? <div style={{ fontSize: 12, color: "#b91c1c" }}>{error}</div> : null}
+                </div>
+
+                <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "0.6rem", marginBottom: "0.7rem" }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, marginBottom: "0.45rem" }}>Grid Generation</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: "0.45rem" }}>
+                    <label style={{ fontSize: 12 }}>Columns<input type="number" min={1} value={gridCols} onChange={(e) => setGridCols(Number.parseInt(e.target.value || "1", 10))} style={{ width: "100%", marginTop: 4, padding: "0.35rem", border: "1px solid #d1d5db", borderRadius: 6 }} /></label>
+                    <label style={{ fontSize: 12 }}>Rows<input type="number" min={1} value={gridRows} onChange={(e) => setGridRows(Number.parseInt(e.target.value || "1", 10))} style={{ width: "100%", marginTop: 4, padding: "0.35rem", border: "1px solid #d1d5db", borderRadius: 6 }} /></label>
+                    <label style={{ fontSize: 12 }}>Margin(px)<input type="number" min={0} value={gridMargin} onChange={(e) => setGridMargin(Number.parseInt(e.target.value || "0", 10))} style={{ width: "100%", marginTop: 4, padding: "0.35rem", border: "1px solid #d1d5db", borderRadius: 6 }} /></label>
+                    <label style={{ fontSize: 12 }}>Gutter(px)<input type="number" min={0} value={gridGutter} onChange={(e) => setGridGutter(Number.parseInt(e.target.value || "0", 10))} style={{ width: "100%", marginTop: 4, padding: "0.35rem", border: "1px solid #d1d5db", borderRadius: 6 }} /></label>
+                  </div>
+                  <div style={{ marginTop: "0.5rem", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.5rem" }}>
+                    <div style={{ fontSize: 12, color: "#64748b" }}>
+                      Will create <strong>{Math.max(1, Math.round(gridCols)) * Math.max(1, Math.round(gridRows))}</strong> boxes
+                    </div>
+                    <button type="button" onClick={generateGridFallback} style={{ padding: "0.45rem 0.7rem", border: "1px solid #d1d5db", borderRadius: 8, background: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                      Generate Grid
+                    </button>
+                  </div>
+                </div>
+
+                {orderedCards.length > 0 ? (
+                  <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "0.6rem" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.45rem" }}>
+                      <strong style={{ fontSize: 13 }}>Crop Preview / Order</strong>
+                      <span style={{ fontSize: 12, color: "#64748b" }}>{manualOrderIds ? "manual" : "auto"}</span>
+                    </div>
+                    <div style={{ display: "grid", gap: "0.5rem" }}>
+                      {orderedCards.map((card, idx) => (
+                        <div
+                          key={`modal-review-${card._id}`}
+                          onClick={() => setSelectedId(card._id)}
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "22px 90px 90px 70px auto",
+                            gap: "0.4rem",
+                            alignItems: "center",
+                            border: selectedId === card._id ? "2px solid #2563eb" : "1px solid #e5e7eb",
+                            borderRadius: 8,
+                            padding: "0.4rem",
+                            background: selectedId === card._id ? "#eff6ff" : "#fff",
+                          }}
+                        >
+                          <div style={{ fontSize: 11, color: "#64748b", textAlign: "center" }}>{idx + 1}</div>
+                          <div style={cropThumbStyle(sheetUrl, imageWidth, imageHeight, card)} />
+                          <select value={card.label} onChange={(e) => updateCard(card._id, { label: e.target.value as DetectedCardLabel })} style={{ padding: "0.35rem", borderRadius: 6, border: "1px solid #d1d5db", fontSize: 12 }}>
+                            <option value="cover">Cover</option>
+                            <option value="page">Page</option>
+                            <option value="end">End</option>
+                            <option value="unknown">Unknown</option>
+                          </select>
+                          <input
+                            type="number"
+                            value={card.pageNumber ?? ""}
+                            onChange={(e) => {
+                              const raw = e.target.value.trim();
+                              const num = raw ? Number.parseInt(raw, 10) : null;
+                              updateCard(card._id, { pageNumber: Number.isFinite(num as number) ? (num as number) : null });
+                            }}
+                            placeholder="#"
+                            style={{ padding: "0.35rem", borderRadius: 6, border: "1px solid #d1d5db", fontSize: 12 }}
+                          />
+                          <div style={{ display: "flex", gap: "0.25rem", justifyContent: "flex-end" }}>
+                            <button type="button" disabled={idx === 0} onClick={() => moveCard(card._id, -1)} style={{ padding: "0.28rem 0.4rem", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff", cursor: idx === 0 ? "not-allowed" : "pointer", fontSize: 12 }}>◀</button>
+                            <button type="button" disabled={idx === orderedCards.length - 1} onClick={() => moveCard(card._id, 1)} style={{ padding: "0.28rem 0.4rem", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff", cursor: idx === orderedCards.length - 1 ? "not-allowed" : "pointer", fontSize: 12 }}>▶</button>
+                            <button type="button" onClick={() => deleteCard(card._id)} style={{ padding: "0.28rem 0.4rem", borderRadius: 6, border: "1px solid #ef4444", background: "#fff", color: "#b91c1c", cursor: "pointer", fontSize: 12 }}>Del</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
