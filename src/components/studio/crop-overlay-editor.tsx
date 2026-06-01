@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/refs */
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 export type DetectedCardLabel = "cover" | "end" | "page" | "unknown";
 
@@ -19,6 +19,8 @@ interface CropOverlayEditorProps {
   imageHeight: number;
   onChange?: (cards: DetectedCard[]) => void;
   autoOpenOnMount?: boolean;
+  hideInlineWorkspace?: boolean;
+  modalFooter?: ReactNode;
 }
 
 type InternalCard = DetectedCard & { _id: string };
@@ -323,7 +325,15 @@ function cropThumbStyle(sheetUrl: string, imageW: number, imageH: number, card: 
   };
 }
 
-export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange, autoOpenOnMount = false }: CropOverlayEditorProps) {
+export function CropOverlayEditor({
+  sheetUrl,
+  imageWidth,
+  imageHeight,
+  onChange,
+  autoOpenOnMount = false,
+  hideInlineWorkspace = false,
+  modalFooter,
+}: CropOverlayEditorProps) {
   const [cards, setCards] = useState<InternalCard[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -623,7 +633,7 @@ export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange,
         Ordering rule: Cover first, End last, numbered pages ascending, then visual-position fallback.
       </p>
 
-      <div style={{ position: "relative", width: "100%", border: "1px solid #e5e7eb", borderRadius: 8, overflow: "hidden", background: "#f8fafc", maxHeight: 560 }}>
+      {!hideInlineWorkspace ? <div style={{ position: "relative", width: "100%", border: "1px solid #e5e7eb", borderRadius: 8, overflow: "hidden", background: "#f8fafc", maxHeight: 560 }}>
         <img src={sheetUrl} alt="Contact sheet" onLoad={(event) => measureDisplayedImageFromElement(event.target as HTMLImageElement, "inline")} style={{ width: "100%", height: "auto", display: "block" }} />
         {inlineDisplaySize.width > 0
           ? cards.map((card) => {
@@ -682,9 +692,9 @@ export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange,
               );
             })
           : null}
-      </div>
+      </div> : null}
 
-      {!isFullscreen ? <div style={{ marginTop: "0.65rem", display: "grid", gap: "0.35rem" }}>
+      {!hideInlineWorkspace && !isFullscreen ? <div style={{ marginTop: "0.65rem", display: "grid", gap: "0.35rem" }}>
         <div style={{ fontSize: 12, color: "#334155" }}>Detected {cards.length} pages</div>
         {coverCount === 0 ? <div style={{ fontSize: 12, color: "#b45309" }}>Warning: No Cover detected.</div> : null}
         {endCount === 0 ? <div style={{ fontSize: 12, color: "#b45309" }}>Warning: No End detected.</div> : null}
@@ -697,7 +707,7 @@ export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange,
         {error ? <div style={{ fontSize: 12, color: "#b91c1c" }}>{error}</div> : null}
       </div> : null}
 
-      {!isFullscreen ? <div style={{ marginTop: "0.8rem", borderTop: "1px solid #e5e7eb", paddingTop: "0.75rem" }}>
+      {!hideInlineWorkspace && !isFullscreen ? <div style={{ marginTop: "0.8rem", borderTop: "1px solid #e5e7eb", paddingTop: "0.75rem" }}>
         <div style={{ fontWeight: 700, fontSize: 13, marginBottom: "0.5rem" }}>Grid Fallback</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr)) auto", gap: "0.45rem", alignItems: "end" }}>
           <label style={{ fontSize: 12 }}>Columns<input type="number" min={1} value={gridCols} onChange={(e) => setGridCols(Number.parseInt(e.target.value || "1", 10))} style={{ width: "100%", marginTop: 4, padding: "0.35rem", border: "1px solid #d1d5db", borderRadius: 6 }} /></label>
@@ -711,7 +721,7 @@ export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange,
         </p>
       </div> : null}
 
-      {!isFullscreen && orderedCards.length > 0 ? (
+      {!hideInlineWorkspace && !isFullscreen && orderedCards.length > 0 ? (
         <div style={{ marginTop: "0.85rem", borderTop: "1px solid #e5e7eb", paddingTop: "0.8rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
             <strong style={{ fontSize: 13 }}>Review Strip</strong>
@@ -922,6 +932,12 @@ export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange,
                         </div>
                       ))}
                     </div>
+                  </div>
+                ) : null}
+
+                {modalFooter ? (
+                  <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "0.75rem", marginTop: "0.75rem" }}>
+                    {modalFooter}
                   </div>
                 ) : null}
               </div>

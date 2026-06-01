@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { getAssetUrl } from "@/lib/asset-url";
 import { CropOverlayEditor, type DetectedCard } from "@/components/studio/crop-overlay-editor";
 
 interface ContactSheetUploadFormProps {
@@ -35,8 +34,6 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
   const [reviewConfirmed, setReviewConfirmed] = useState(false);
   const [allowMismatchImport, setAllowMismatchImport] = useState(false);
   const lastCardsSignatureRef = useRef<string>("");
-
-  const previewUrl = result?.sheetAssetId ? getAssetUrl(result.sheetAssetId) : null;
 
   async function upload(file: File) {
     setError("");
@@ -219,16 +216,6 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
           <p style={{ margin: "0.25rem 0 0", fontSize: 12, color: "#475569" }}>
             Size: {result.imageWidth ?? "?"} × {result.imageHeight ?? "?"}
           </p>
-          {previewUrl ? (
-            <div style={{ marginTop: "0.55rem" }}>
-              <img
-                src={previewUrl}
-                alt="Contact sheet preview"
-                style={{ width: "100%", maxHeight: 260, objectFit: "contain", borderRadius: 8, border: "1px solid #e5e7eb", background: "#fff" }}
-              />
-            </div>
-          ) : null}
-
           {result.imageWidth && result.imageHeight ? (
             <div style={{ marginTop: "0.7rem" }}>
               <div style={{ display: "grid", gap: "0.45rem", marginBottom: "0.7rem", padding: "0.6rem", border: "1px solid #e5e7eb", borderRadius: 8, background: "#f8fafc" }}>
@@ -260,44 +247,45 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
                 imageHeight={result.imageHeight}
                 onChange={setCards}
                 autoOpenOnMount
-              />
-              {cards.length > 0 ? (
-                <div style={{ marginTop: "0.6rem", display: "grid", gap: "0.45rem" }}>
-                  <p style={{ margin: 0, fontSize: 12, color: "#475569" }}>Detection draft captured: {cards.length} boxes.</p>
-                  <p style={{ margin: 0, fontSize: 12, color: "#334155" }}>
-                    Import result preview: <strong>{importSummary}</strong>
-                  </p>
-                  <label style={{ display: "flex", gap: "0.45rem", alignItems: "center", fontSize: 12, color: "#334155" }}>
-                    <input type="checkbox" checked={reviewConfirmed} onChange={(e) => setReviewConfirmed(e.target.checked)} />
-                    I reviewed these crop boxes and roles.
-                  </label>
-                  {countMismatch ? (
-                    <label style={{ display: "flex", gap: "0.45rem", alignItems: "center", fontSize: 12, color: "#92400e" }}>
-                      <input type="checkbox" checked={allowMismatchImport} onChange={(e) => setAllowMismatchImport(e.target.checked)} />
-                      Allow mismatch import ({selectedCount} selected vs expected {expectedCount}).
+                hideInlineWorkspace
+                modalFooter={
+                  <div style={{ display: "grid", gap: "0.45rem" }}>
+                    <p style={{ margin: 0, fontSize: 12, color: "#475569" }}>Detection draft captured: {cards.length} boxes.</p>
+                    <p style={{ margin: 0, fontSize: 12, color: "#334155" }}>
+                      Import result preview: <strong>{importSummary}</strong>
+                    </p>
+                    <label style={{ display: "flex", gap: "0.45rem", alignItems: "center", fontSize: 12, color: "#334155" }}>
+                      <input type="checkbox" checked={reviewConfirmed} onChange={(e) => setReviewConfirmed(e.target.checked)} />
+                      I reviewed these crop boxes and roles.
                     </label>
-                  ) : null}
-                  <button
-                    type="button"
-                    disabled={!reviewConfirmed || coverCount !== 1 || endCount !== 1 || (countMismatch && !allowMismatchImport)}
-                    onClick={() => {
-                      setShowConfirm(true);
-                      setImportError("");
-                    }}
-                    style={{
-                      padding: "0.6rem 0.8rem",
-                      borderRadius: 8,
-                      border: "1px solid #2563eb",
-                      background: !reviewConfirmed || coverCount !== 1 || endCount !== 1 || (countMismatch && !allowMismatchImport) ? "#93c5fd" : "#2563eb",
-                      color: "#fff",
-                      cursor: !reviewConfirmed || coverCount !== 1 || endCount !== 1 || (countMismatch && !allowMismatchImport) ? "not-allowed" : "pointer",
-                      fontWeight: 700,
-                    }}
-                  >
-                    Import Book
-                  </button>
-                </div>
-              ) : null}
+                    {countMismatch ? (
+                      <label style={{ display: "flex", gap: "0.45rem", alignItems: "center", fontSize: 12, color: "#92400e" }}>
+                        <input type="checkbox" checked={allowMismatchImport} onChange={(e) => setAllowMismatchImport(e.target.checked)} />
+                        Allow mismatch import ({selectedCount} selected vs expected {expectedCount}).
+                      </label>
+                    ) : null}
+                    <button
+                      type="button"
+                      disabled={!reviewConfirmed || coverCount !== 1 || endCount !== 1 || (countMismatch && !allowMismatchImport)}
+                      onClick={() => {
+                        setShowConfirm(true);
+                        setImportError("");
+                      }}
+                      style={{
+                        padding: "0.6rem 0.8rem",
+                        borderRadius: 8,
+                        border: "1px solid #2563eb",
+                        background: !reviewConfirmed || coverCount !== 1 || endCount !== 1 || (countMismatch && !allowMismatchImport) ? "#93c5fd" : "#2563eb",
+                        color: "#fff",
+                        cursor: !reviewConfirmed || coverCount !== 1 || endCount !== 1 || (countMismatch && !allowMismatchImport) ? "not-allowed" : "pointer",
+                        fontWeight: 700,
+                      }}
+                    >
+                      Import Book
+                    </button>
+                  </div>
+                }
+              />
             </div>
           ) : null}
         </div>
