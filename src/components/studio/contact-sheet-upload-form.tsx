@@ -259,6 +259,7 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
                 imageWidth={result.imageWidth}
                 imageHeight={result.imageHeight}
                 onChange={setCards}
+                autoOpenOnMount
               />
               {cards.length > 0 ? (
                 <div style={{ marginTop: "0.6rem", display: "grid", gap: "0.45rem" }}>

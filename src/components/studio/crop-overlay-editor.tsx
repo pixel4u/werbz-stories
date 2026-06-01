@@ -18,6 +18,7 @@ interface CropOverlayEditorProps {
   imageWidth: number;
   imageHeight: number;
   onChange?: (cards: DetectedCard[]) => void;
+  autoOpenOnMount?: boolean;
 }
 
 type InternalCard = DetectedCard & { _id: string };
@@ -320,7 +321,7 @@ function cropThumbStyle(sheetUrl: string, imageW: number, imageH: number, card: 
   };
 }
 
-export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange }: CropOverlayEditorProps) {
+export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange, autoOpenOnMount = false }: CropOverlayEditorProps) {
   const [cards, setCards] = useState<InternalCard[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -332,7 +333,8 @@ export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange 
   const [gridGutter, setGridGutter] = useState(12);
   const [displaySize, setDisplaySize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(autoOpenOnMount);
+  const didAutoOpenRef = useRef(false);
   const editRef = useRef<{
     mode: "move" | "resize";
     id: string;
@@ -345,6 +347,13 @@ export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange 
   useEffect(() => {
     onChange?.(toPublicShape(cards));
   }, [cards, onChange]);
+
+  useEffect(() => {
+    if (autoOpenOnMount && !didAutoOpenRef.current) {
+      setIsFullscreen(true);
+      didAutoOpenRef.current = true;
+    }
+  }, [autoOpenOnMount]);
 
   const measureDisplayedImageFromElement = useCallback((element: HTMLImageElement) => {
     const rect = element.getBoundingClientRect();
