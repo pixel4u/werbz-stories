@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { getAssetUrl } from "@/lib/asset-url";
 import { CropOverlayEditor, type DetectedCard } from "@/components/studio/crop-overlay-editor";
@@ -31,6 +31,10 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
   const [importMode, setImportMode] = useState<ImportMode>("new");
   const [importBusy, setImportBusy] = useState(false);
   const [importError, setImportError] = useState("");
+  const [expectedCount, setExpectedCount] = useState<number>(5);
+  const [reviewConfirmed, setReviewConfirmed] = useState(false);
+  const [allowMismatchImport, setAllowMismatchImport] = useState(false);
+  const lastCardsSignatureRef = useRef<string>("");
 
   const previewUrl = result?.sheetAssetId ? getAssetUrl(result.sheetAssetId) : null;
 
@@ -80,6 +84,45 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
   const coverCount = ordered.filter((c) => c.label === "cover").length;
   const endCount = ordered.filter((c) => c.label === "end").length;
   const pageCount = ordered.filter((c) => c.label === "page").length;
+  const selectedCount = coverCount + pageCount + endCount;
+  const hasAutoDetectFailure = !!result && cards.length === 0;
+  const countMismatch = expectedCount > 0 && selectedCount !== expectedCount;
+  const importSummary = `Cover + ${pageCount} story page${pageCount === 1 ? "" : "s"} + End`;
+  const importDisabled =
+    importBusy ||
+    ordered.length === 0 ||
+    !reviewConfirmed ||
+    coverCount !== 1 ||
+    endCount !== 1 ||
+    (countMismatch && !allowMismatchImport);
+
+  const cardsSignature = useMemo(
+    () =>
+      JSON.stringify(
+        cards.map((c) => ({
+          x: c.box.x,
+          y: c.box.y,
+          w: c.box.width,
+          h: c.box.height,
+          label: c.label,
+          n: c.pageNumber,
+          p: c.positionIndex,
+        }))
+      ),
+    [cards]
+  );
+
+  useEffect(() => {
+    if (!cards.length) {
+      lastCardsSignatureRef.current = "";
+      return;
+    }
+    if (cardsSignature !== lastCardsSignatureRef.current) {
+      setReviewConfirmed(false);
+      setAllowMismatchImport(false);
+      lastCardsSignatureRef.current = cardsSignature;
+    }
+  }, [cards.length, cardsSignature]);
 
   async function importBook() {
     if (!result) return;
@@ -188,6 +231,29 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
 
           {result.imageWidth && result.imageHeight ? (
             <div style={{ marginTop: "0.7rem" }}>
+              <div style={{ display: "grid", gap: "0.45rem", marginBottom: "0.7rem", padding: "0.6rem", border: "1px solid #e5e7eb", borderRadius: 8, background: "#f8fafc" }}>
+                <label style={{ fontSize: 12, color: "#334155", display: "grid", gap: 4 }}>
+                  Expected page count (Cover + story pages + End)
+                  <input
+                    type="number"
+                    min={3}
+                    value={expectedCount}
+                    onChange={(e) => setExpectedCount(Number.parseInt(e.target.value || "0", 10) || 0)}
+                    style={{ width: 180, padding: "0.4rem", border: "1px solid #d1d5db", borderRadius: 6, background: "#fff" }}
+                  />
+                </label>
+                {hasAutoDetectFailure ? (
+                  <p style={{ margin: 0, fontSize: 12, color: "#b91c1c", fontWeight: 700 }}>
+                    Auto-detection found 0 pages. Create crop boxes manually or use Grid Fallback before importing.
+                  </p>
+                ) : null}
+                {selectedCount > 0 && countMismatch ? (
+                  <p style={{ margin: 0, fontSize: 12, color: "#b91c1c", fontWeight: 700 }}>
+                    Expected {expectedCount} pages, but {selectedCount} crop boxes are selected.
+                  </p>
+                ) : null}
+              </div>
+
               <CropOverlayEditor
                 sheetUrl={result.sheetUrl}
                 imageWidth={result.imageWidth}
@@ -197,13 +263,35 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
               {cards.length > 0 ? (
                 <div style={{ marginTop: "0.6rem", display: "grid", gap: "0.45rem" }}>
                   <p style={{ margin: 0, fontSize: 12, color: "#475569" }}>Detection draft captured: {cards.length} boxes.</p>
+                  <p style={{ margin: 0, fontSize: 12, color: "#334155" }}>
+                    Import result preview: <strong>{importSummary}</strong>
+                  </p>
+                  <label style={{ display: "flex", gap: "0.45rem", alignItems: "center", fontSize: 12, color: "#334155" }}>
+                    <input type="checkbox" checked={reviewConfirmed} onChange={(e) => setReviewConfirmed(e.target.checked)} />
+                    I reviewed these crop boxes and roles.
+                  </label>
+                  {countMismatch ? (
+                    <label style={{ display: "flex", gap: "0.45rem", alignItems: "center", fontSize: 12, color: "#92400e" }}>
+                      <input type="checkbox" checked={allowMismatchImport} onChange={(e) => setAllowMismatchImport(e.target.checked)} />
+                      Allow mismatch import ({selectedCount} selected vs expected {expectedCount}).
+                    </label>
+                  ) : null}
                   <button
                     type="button"
+                    disabled={!reviewConfirmed || coverCount !== 1 || endCount !== 1 || (countMismatch && !allowMismatchImport)}
                     onClick={() => {
                       setShowConfirm(true);
                       setImportError("");
                     }}
-                    style={{ padding: "0.6rem 0.8rem", borderRadius: 8, border: "1px solid #2563eb", background: "#2563eb", color: "#fff", cursor: "pointer", fontWeight: 700 }}
+                    style={{
+                      padding: "0.6rem 0.8rem",
+                      borderRadius: 8,
+                      border: "1px solid #2563eb",
+                      background: !reviewConfirmed || coverCount !== 1 || endCount !== 1 || (countMismatch && !allowMismatchImport) ? "#93c5fd" : "#2563eb",
+                      color: "#fff",
+                      cursor: !reviewConfirmed || coverCount !== 1 || endCount !== 1 || (countMismatch && !allowMismatchImport) ? "not-allowed" : "pointer",
+                      fontWeight: 700,
+                    }}
                   >
                     Import Book
                   </button>
@@ -229,6 +317,8 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
               <div>Cover crops: {coverCount}</div>
               <div>Story pages: {pageCount}</div>
               <div>End crops: {endCount}</div>
+              <div>Expected count: {expectedCount}</div>
+              <div>Result preview: {importSummary}</div>
             </div>
 
             <label style={{ display: "grid", gap: "0.35rem", marginTop: "0.8rem", fontSize: 13 }}>
@@ -250,7 +340,7 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
               <button
                 type="button"
                 onClick={importBook}
-                disabled={importBusy || ordered.length === 0}
+                disabled={importDisabled}
                 style={{ padding: "0.6rem 0.85rem", borderRadius: 8, border: "1px solid #2563eb", background: "#2563eb", color: "#fff", cursor: "pointer", fontWeight: 700 }}
               >
                 {importBusy ? "Importing..." : "Import Book"}

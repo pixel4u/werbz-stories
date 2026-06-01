@@ -539,6 +539,9 @@ export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange 
           <label style={{ fontSize: 12 }}>Gutter(px)<input type="number" min={0} value={gridGutter} onChange={(e) => setGridGutter(Number.parseInt(e.target.value || "0", 10))} style={{ width: "100%", marginTop: 4, padding: "0.35rem", border: "1px solid #d1d5db", borderRadius: 6 }} /></label>
           <button type="button" onClick={generateGridFallback} style={{ padding: "0.48rem 0.7rem", border: "1px solid #d1d5db", borderRadius: 8, background: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>Generate Grid</button>
         </div>
+        <p style={{ margin: "0.4rem 0 0", fontSize: 12, color: "#64748b" }}>
+          Current grid settings will create <strong>{Math.max(1, Math.round(gridCols)) * Math.max(1, Math.round(gridRows))}</strong> crop boxes.
+        </p>
       </div>
 
       {orderedCards.length > 0 ? (
