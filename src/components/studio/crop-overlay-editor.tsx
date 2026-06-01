@@ -333,7 +333,8 @@ export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange,
   const [gridRows, setGridRows] = useState(4);
   const [gridMargin, setGridMargin] = useState(24);
   const [gridGutter, setGridGutter] = useState(12);
-  const [displaySize, setDisplaySize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
+  const [inlineDisplaySize, setInlineDisplaySize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
+  const [modalDisplaySize, setModalDisplaySize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(autoOpenOnMount);
   const didAutoOpenRef = useRef(false);
@@ -357,9 +358,10 @@ export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange,
     }
   }, [autoOpenOnMount]);
 
-  const measureDisplayedImageFromElement = useCallback((element: HTMLImageElement) => {
+  const measureDisplayedImageFromElement = useCallback((element: HTMLImageElement, surface: "inline" | "modal") => {
     const rect = element.getBoundingClientRect();
-    setDisplaySize({ width: rect.width, height: rect.height });
+    if (surface === "modal") setModalDisplaySize({ width: rect.width, height: rect.height });
+    else setInlineDisplaySize({ width: rect.width, height: rect.height });
   }, []);
 
   const cardById = useMemo(() => new Map(cards.map((c) => [c._id, c])), [cards]);
@@ -374,8 +376,9 @@ export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange,
 
   const orderedCards = useMemo(() => effectiveOrderIds.map((id) => cardById.get(id)).filter((c): c is InternalCard => Boolean(c)), [effectiveOrderIds, cardById]);
 
-  const scaleX = displaySize.width > 0 ? displaySize.width / imageWidth : 1;
-  const scaleY = displaySize.height > 0 ? displaySize.height / imageHeight : 1;
+  const activeDisplaySize = isFullscreen ? modalDisplaySize : inlineDisplaySize;
+  const scaleX = activeDisplaySize.width > 0 ? activeDisplaySize.width / imageWidth : 1;
+  const scaleY = activeDisplaySize.height > 0 ? activeDisplaySize.height / imageHeight : 1;
 
   const lowConfidenceCount = useMemo(() => cards.filter((c) => c.confidence > 0 && c.confidence < 50).length, [cards]);
   const coverCount = useMemo(() => cards.filter((c) => c.label === "cover").length, [cards]);
@@ -586,14 +589,14 @@ export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange,
   }, [scaleX, scaleY, updateCardBox]);
 
   const resizeHandles: Array<{ key: "n" | "s" | "e" | "w" | "nw" | "ne" | "sw" | "se"; style: CSSProperties; cursor: string }> = [
-    { key: "nw", style: { left: -6, top: -6 }, cursor: "nwse-resize" },
-    { key: "ne", style: { right: -6, top: -6 }, cursor: "nesw-resize" },
-    { key: "sw", style: { left: -6, bottom: -6 }, cursor: "nesw-resize" },
-    { key: "se", style: { right: -6, bottom: -6 }, cursor: "nwse-resize" },
-    { key: "n", style: { left: "50%", top: -6, transform: "translateX(-50%)" }, cursor: "ns-resize" },
-    { key: "s", style: { left: "50%", bottom: -6, transform: "translateX(-50%)" }, cursor: "ns-resize" },
-    { key: "e", style: { right: -6, top: "50%", transform: "translateY(-50%)" }, cursor: "ew-resize" },
-    { key: "w", style: { left: -6, top: "50%", transform: "translateY(-50%)" }, cursor: "ew-resize" },
+    { key: "nw", style: { left: -8, top: -8 }, cursor: "nwse-resize" },
+    { key: "ne", style: { right: -8, top: -8 }, cursor: "nesw-resize" },
+    { key: "sw", style: { left: -8, bottom: -8 }, cursor: "nesw-resize" },
+    { key: "se", style: { right: -8, bottom: -8 }, cursor: "nwse-resize" },
+    { key: "n", style: { left: "50%", top: -8, transform: "translateX(-50%)" }, cursor: "ns-resize" },
+    { key: "s", style: { left: "50%", bottom: -8, transform: "translateX(-50%)" }, cursor: "ns-resize" },
+    { key: "e", style: { right: -8, top: "50%", transform: "translateY(-50%)" }, cursor: "ew-resize" },
+    { key: "w", style: { left: -8, top: "50%", transform: "translateY(-50%)" }, cursor: "ew-resize" },
   ];
 
   return (
@@ -621,8 +624,8 @@ export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange,
       </p>
 
       <div style={{ position: "relative", width: "100%", border: "1px solid #e5e7eb", borderRadius: 8, overflow: "hidden", background: "#f8fafc", maxHeight: 560 }}>
-        <img src={sheetUrl} alt="Contact sheet" onLoad={(event) => measureDisplayedImageFromElement(event.target as HTMLImageElement)} style={{ width: "100%", height: "auto", display: "block" }} />
-        {displaySize.width > 0
+        <img src={sheetUrl} alt="Contact sheet" onLoad={(event) => measureDisplayedImageFromElement(event.target as HTMLImageElement, "inline")} style={{ width: "100%", height: "auto", display: "block" }} />
+        {inlineDisplaySize.width > 0
           ? cards.map((card) => {
               const left = card.box.x * scaleX;
               const top = card.box.y * scaleY;
@@ -639,15 +642,39 @@ export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange,
                   }}
                   style={{ position: "absolute", left, top, width, height, border: isSelected ? "3px solid #2563eb" : "2px solid #60a5fa", boxShadow: "0 0 0 1px rgba(255,255,255,0.7) inset", cursor: "move", pointerEvents: "auto" }}
                 >
-                  <span style={{ position: "absolute", top: -22, left: 0, background: isSelected ? "#1d4ed8" : "#2563eb", color: "#fff", borderRadius: 6, padding: "2px 6px", fontSize: 11, fontWeight: 700 }}>
-                    {card.label === "page" && card.pageNumber ? `Page ${card.pageNumber}` : card.label}
-                  </span>
+                  <div style={{ position: "absolute", top: -28, left: 0, display: "flex", gap: 4, alignItems: "center", background: isSelected ? "#1d4ed8" : "#2563eb", color: "#fff", borderRadius: 6, padding: "2px 6px" }}>
+                    <select
+                      value={card.label}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onChange={(e) => updateCard(card._id, { label: e.target.value as DetectedCardLabel })}
+                      style={{ fontSize: 11, fontWeight: 700, border: "none", background: "transparent", color: "#fff", outline: "none" }}
+                    >
+                      <option value="cover" style={{ color: "#0f172a" }}>Cover</option>
+                      <option value="page" style={{ color: "#0f172a" }}>Page</option>
+                      <option value="end" style={{ color: "#0f172a" }}>End</option>
+                      <option value="unknown" style={{ color: "#0f172a" }}>Unknown</option>
+                    </select>
+                    {card.label === "page" ? (
+                      <input
+                        type="number"
+                        value={card.pageNumber ?? ""}
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onChange={(e) => {
+                          const raw = e.target.value.trim();
+                          const num = raw ? Number.parseInt(raw, 10) : null;
+                          updateCard(card._id, { pageNumber: Number.isFinite(num as number) ? (num as number) : null });
+                        }}
+                        placeholder="#"
+                        style={{ width: 48, fontSize: 11, border: "none", borderRadius: 4, padding: "1px 4px" }}
+                      />
+                    ) : null}
+                  </div>
                   {isSelected
                     ? resizeHandles.map((handle) => (
                         <div
                           key={`${card._id}-${handle.key}`}
                           onPointerDown={(event) => beginResize(card._id, handle.key, event)}
-                          style={{ position: "absolute", width: 12, height: 12, borderRadius: 999, background: "#fff", border: "2px solid #1d4ed8", ...handle.style, cursor: handle.cursor }}
+                          style={{ position: "absolute", width: 16, height: 16, borderRadius: 999, background: "#fff", border: "2px solid #1d4ed8", ...handle.style, cursor: handle.cursor }}
                         />
                       ))
                     : null}
@@ -754,8 +781,8 @@ export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange,
             <div style={{ overflow: "hidden", display: "grid", gridTemplateColumns: "minmax(0,1fr) 420px", gap: "0.8rem" }}>
               <div style={{ overflow: "auto", minHeight: "80vh" }}>
                 <div style={{ position: "relative", width: "100%", border: "1px solid #e5e7eb", borderRadius: 8, overflow: "hidden", background: "#f8fafc" }}>
-                  <img src={sheetUrl} alt="Contact sheet full size" onLoad={(event) => measureDisplayedImageFromElement(event.target as HTMLImageElement)} style={{ width: "100%", height: "auto", display: "block" }} />
-                  {displaySize.width > 0
+                  <img src={sheetUrl} alt="Contact sheet full size" onLoad={(event) => measureDisplayedImageFromElement(event.target as HTMLImageElement, "modal")} style={{ width: "100%", height: "auto", display: "block" }} />
+                  {modalDisplaySize.width > 0
                     ? cards.map((card) => {
                         const left = card.box.x * scaleX;
                         const top = card.box.y * scaleY;
@@ -772,15 +799,39 @@ export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange,
                             }}
                             style={{ position: "absolute", left, top, width, height, border: isSelected ? "3px solid #2563eb" : "2px solid #60a5fa", boxShadow: "0 0 0 1px rgba(255,255,255,0.7) inset", cursor: "move", pointerEvents: "auto" }}
                           >
-                            <span style={{ position: "absolute", top: -22, left: 0, background: isSelected ? "#1d4ed8" : "#2563eb", color: "#fff", borderRadius: 6, padding: "2px 6px", fontSize: 11, fontWeight: 700 }}>
-                              {card.label === "page" && card.pageNumber ? `Page ${card.pageNumber}` : card.label}
-                            </span>
+                            <div style={{ position: "absolute", top: -30, left: 0, display: "flex", gap: 4, alignItems: "center", background: isSelected ? "#1d4ed8" : "#2563eb", color: "#fff", borderRadius: 6, padding: "2px 6px" }}>
+                              <select
+                                value={card.label}
+                                onPointerDown={(event) => event.stopPropagation()}
+                                onChange={(e) => updateCard(card._id, { label: e.target.value as DetectedCardLabel })}
+                                style={{ fontSize: 11, fontWeight: 700, border: "none", background: "transparent", color: "#fff", outline: "none" }}
+                              >
+                                <option value="cover" style={{ color: "#0f172a" }}>Cover</option>
+                                <option value="page" style={{ color: "#0f172a" }}>Page</option>
+                                <option value="end" style={{ color: "#0f172a" }}>End</option>
+                                <option value="unknown" style={{ color: "#0f172a" }}>Unknown</option>
+                              </select>
+                              {card.label === "page" ? (
+                                <input
+                                  type="number"
+                                  value={card.pageNumber ?? ""}
+                                  onPointerDown={(event) => event.stopPropagation()}
+                                  onChange={(e) => {
+                                    const raw = e.target.value.trim();
+                                    const num = raw ? Number.parseInt(raw, 10) : null;
+                                    updateCard(card._id, { pageNumber: Number.isFinite(num as number) ? (num as number) : null });
+                                  }}
+                                  placeholder="#"
+                                  style={{ width: 52, fontSize: 11, border: "none", borderRadius: 4, padding: "1px 4px" }}
+                                />
+                              ) : null}
+                            </div>
                             {isSelected
                               ? resizeHandles.map((handle) => (
                                   <div
                                     key={`full-${card._id}-${handle.key}`}
                                     onPointerDown={(event) => beginResize(card._id, handle.key, event)}
-                                    style={{ position: "absolute", width: 12, height: 12, borderRadius: 999, background: "#fff", border: "2px solid #1d4ed8", ...handle.style, cursor: handle.cursor }}
+                                    style={{ position: "absolute", width: 16, height: 16, borderRadius: 999, background: "#fff", border: "2px solid #1d4ed8", ...handle.style, cursor: handle.cursor }}
                                   />
                                 ))
                               : null}
