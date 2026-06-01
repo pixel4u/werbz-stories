@@ -1,7 +1,7 @@
 import { asc, eq } from "drizzle-orm";
 
 import { getDb } from "@/db/client";
-import { pages, storybooks } from "@/db/schema";
+import { assets, pages, storybooks } from "@/db/schema";
 import {
   parseCanonicalStorybook,
   parseStorybook,
@@ -13,6 +13,71 @@ import {
 
 function toIsoString(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}
+
+function parseAssetIdFromPageContent(content: unknown): string | null {
+  if (!content || typeof content !== "object") return null;
+  const c = content as Record<string, unknown>;
+  const kind = typeof c.kind === "string" ? c.kind : "";
+  if (kind === "image" || kind === "video") {
+    return typeof c.assetId === "string" && c.assetId ? c.assetId : null;
+  }
+  if (kind === "embed") {
+    const source = c.source;
+    if (source && typeof source === "object") {
+      const src = source as Record<string, unknown>;
+      if (src.type === "asset" && typeof src.assetId === "string" && src.assetId) return src.assetId;
+    }
+    return null;
+  }
+  if (kind === "text") {
+    return typeof c.backgroundAssetId === "string" && c.backgroundAssetId ? c.backgroundAssetId : null;
+  }
+  return null;
+}
+
+async function derivePageAspectRatio(args: {
+  coverPageId: string | null;
+  endPageId: string | null;
+  pageRows: Array<{ id: string; content: unknown }>;
+  theme: unknown;
+}): Promise<number | undefined> {
+  const theme = args.theme;
+  if (theme && typeof theme === "object") {
+    const t = theme as Record<string, unknown>;
+    if (typeof t.pageAspectRatio === "number" && Number.isFinite(t.pageAspectRatio) && t.pageAspectRatio > 0) {
+      return t.pageAspectRatio;
+    }
+  }
+
+  const pageMap = new Map(args.pageRows.map((p) => [p.id, p]));
+  const coverPage = args.coverPageId ? pageMap.get(args.coverPageId) : undefined;
+  const endPage = args.endPageId ? pageMap.get(args.endPageId) : undefined;
+
+  const middle = args.pageRows.filter((p) => p.id !== args.coverPageId && p.id !== args.endPageId);
+  const candidateAssetIds = [
+    coverPage ? parseAssetIdFromPageContent(coverPage.content) : null,
+    ...middle.map((p) => parseAssetIdFromPageContent(p.content)),
+    endPage ? parseAssetIdFromPageContent(endPage.content) : null,
+  ].filter((v): v is string => Boolean(v));
+
+  if (candidateAssetIds.length === 0) return undefined;
+
+  const db = getDb();
+  const uniqueIds = [...new Set(candidateAssetIds)];
+  const byId = new Map<string, { width: number | null; height: number | null }>();
+  for (const id of uniqueIds) {
+    const row = await db.select({ id: assets.id, width: assets.width, height: assets.height }).from(assets).where(eq(assets.id, id)).limit(1);
+    if (row[0]) byId.set(row[0].id, { width: row[0].width, height: row[0].height });
+  }
+
+  for (const assetId of candidateAssetIds) {
+    const meta = byId.get(assetId);
+    if (!meta || !meta.width || !meta.height || meta.width <= 0 || meta.height <= 0) continue;
+    const ratio = meta.width / meta.height;
+    if (Number.isFinite(ratio) && ratio > 0) return ratio;
+  }
+  return undefined;
 }
 
 export async function getStorybookBySlug(slug: string): Promise<Storybook | null> {
@@ -83,6 +148,13 @@ export async function getCanonicalStorybookBySlug(slug: string): Promise<Canonic
     .where(eq(pages.storybookId, row.id))
     .orderBy(asc(pages.position));
 
+  const pageAspectRatio = await derivePageAspectRatio({
+    coverPageId: row.coverPageId ?? null,
+    endPageId: row.endPageId ?? null,
+    pageRows,
+    theme: row.theme,
+  });
+
   const pageMap = new Map(
     pageRows.map((page) => [
       page.id,
@@ -111,6 +183,7 @@ export async function getCanonicalStorybookBySlug(slug: string): Promise<Canonic
     coverAssetId: row.coverAssetId ?? undefined,
     status: row.status,
     theme: row.theme ?? undefined,
+    pageAspectRatio,
     cover: cover
       ? {
           ...cover,

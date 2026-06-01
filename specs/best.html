@@ -274,6 +274,14 @@ function normalizeStorybookFromApi(payload){
     rawCoverAssetId && !String(rawCoverAssetId).startsWith("asset-cover-")
       ? rawCoverAssetId
       : (firstTextBg || rawCoverAssetId);
+  const rawPageRatio =
+    typeof sb.pageAspectRatio === "number"
+      ? sb.pageAspectRatio
+      : (sb.theme && typeof sb.theme.pageAspectRatio === "number" ? sb.theme.pageAspectRatio : null);
+  const pageAspectRatio =
+    typeof rawPageRatio === "number" && Number.isFinite(rawPageRatio)
+      ? clamp(rawPageRatio, 0.55, 1.9)
+      : (1 / 1.42);
   return {
     id: sb.id || DEFAULT_STORYBOOK.id,
     slug: sb.slug || storySlug,
@@ -282,6 +290,7 @@ function normalizeStorybookFromApi(payload){
     coverAssetId: effectiveCoverAssetId,
     author: DEFAULT_STORYBOOK.author,
     theme: sb.theme || DEFAULT_STORYBOOK.theme,
+    pageAspectRatio,
     cover: {
       kicker: "Stories",
       title: sb.title || DEFAULT_STORYBOOK.cover.title,
@@ -355,6 +364,7 @@ root.addChild(floorLayer, stackLayer, activeLayer, chromeLayer);
 
 let PAGE_W = 360;
 let PAGE_H = 510;
+let BOOK_PAGE_RATIO = 1 / 1.42; // width / height
 let SPINE_X = 0;
 let BOOK_Y = 0;
 let pageScale = 1;
@@ -463,8 +473,8 @@ function getFaceAssetId(face){
 function textureForFace(face, side){
   const safeFace = face || { type: "endpaper" };
   const c = document.createElement("canvas");
-  c.width = 900;
-  c.height = 1278;
+  c.width = 1200;
+  c.height = Math.max(640, Math.round(c.width / BOOK_PAGE_RATIO));
   const ctx = c.getContext("2d");
   drawFace(ctx,c.width,c.height,safeFace,side);
   const texture = PIXI.Texture.from(c);
@@ -1372,11 +1382,11 @@ function resize(){
   const availableW = Math.max(220, vw - sideMargin * 2);
   const availableH = Math.max(260, vh - topMargin - bottomMargin);
 
-  // The spread is 2 pages wide. Each page ratio is W:H = 1:1.42.
+  // The spread is 2 pages wide. Page ratio is dynamic via BOOK_PAGE_RATIO.
   // Fit by whichever viewport dimension is tighter so the whole spread is
   // visible and as large as possible (fills the viewport on the tight axis).
   const pageByWidth = availableW / 2;
-  const pageByHeight = availableH / 1.42;
+  const pageByHeight = availableH * BOOK_PAGE_RATIO;
 
   PAGE_W = Math.min(pageByWidth, pageByHeight);
 
@@ -1384,7 +1394,7 @@ function resize(){
   // textures/interaction stay sane.
   PAGE_W = Math.min(PAGE_W, 1100);
   PAGE_W = Math.max(PAGE_W, isPhone ? 132 : 170);
-  PAGE_H = PAGE_W * 1.42;
+  PAGE_H = PAGE_W / BOOK_PAGE_RATIO;
 
   SPINE_X = vw / 2;
 
@@ -2026,9 +2036,11 @@ async function loadStorybookFromApi(){
     if (!res.ok) throw new Error(`storybook api ${res.status}`);
     const json = await res.json();
     STORYBOOK = normalizeStorybookFromApi(json);
+    BOOK_PAGE_RATIO = clamp(STORYBOOK.pageAspectRatio || (1 / 1.42), 0.55, 1.9);
   } catch (err) {
     console.warn("Using fallback storybook mock due to API load error:", err);
     STORYBOOK = DEFAULT_STORYBOOK;
+    BOOK_PAGE_RATIO = 1 / 1.42;
   }
 }
 

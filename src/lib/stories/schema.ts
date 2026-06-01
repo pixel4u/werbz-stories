@@ -124,6 +124,7 @@ export const Storybook = z.object({
   // OPTIONAL per-book look. If present, overrides the Book's default config.
   // This is exactly the JSON your "Copy config" button already exports.
   theme: z.record(z.string(), z.any()).optional(),
+  pageAspectRatio: z.number().positive().optional(), // page width / page height
   pages: z.array(Page),
   createdAt: z.string(), // ISO
   updatedAt: z.string(),
@@ -143,6 +144,7 @@ export const CanonicalStorybook = z.object({
   coverAssetId: z.string().optional(),
   status: StorybookStatus.default("draft"),
   theme: z.record(z.string(), z.any()).optional(),
+  pageAspectRatio: z.number().positive().optional(), // page width / page height
   cover: Page.optional(),
   pages: z.array(Page),
   end: Page.optional(),

@@ -146,11 +146,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       return NextResponse.json({ error: "Import needs at least cover and end cards" }, { status: 400 });
     }
 
-    const croppedAssets: Array<{ role: CardRole; assetId: string; order: number }> = [];
+    const croppedAssets: Array<{ role: CardRole; assetId: string; order: number; width: number | null; height: number | null }> = [];
 
     for (let i = 0; i < importPlan.length; i++) {
       const card = importPlan[i];
-      const extracted = await sharp(sheetBuffer)
+      const { data: extracted, info } = await sharp(sheetBuffer)
         .extract({
           left: card.box.x,
           top: card.box.y,
@@ -159,16 +159,30 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         })
         .resize({ width: 2048, height: 2048, fit: "inside", withoutEnlargement: true })
         .png()
-        .toBuffer();
+        .toBuffer({ resolveWithObject: true });
 
       const saved = await saveAssetFromBuffer({
         buffer: extracted,
         originalName: `contact-sheet-crop-${i + 1}.png`,
         mimeType: "image/png",
+        width: typeof info.width === "number" ? info.width : undefined,
+        height: typeof info.height === "number" ? info.height : undefined,
       });
 
-      croppedAssets.push({ role: card.role, assetId: saved.assetId, order: i });
+      croppedAssets.push({
+        role: card.role,
+        assetId: saved.assetId,
+        order: i,
+        width: typeof info.width === "number" ? info.width : null,
+        height: typeof info.height === "number" ? info.height : null,
+      });
     }
+
+    const coverCrop = croppedAssets.find((c) => c.role === "cover") ?? croppedAssets[0] ?? null;
+    const importPageAspectRatio =
+      coverCrop && coverCrop.width && coverCrop.height && coverCrop.width > 0 && coverCrop.height > 0
+        ? coverCrop.width / coverCrop.height
+        : null;
 
     const sourceRows = await db.select().from(storybooks).where(eq(storybooks.id, routeStorybookId)).limit(1);
     const sourceBook = sourceRows[0];
@@ -188,7 +202,15 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
           summary: sourceBook.summary,
           status: "draft",
           coverAssetId: croppedAssets[0]?.assetId ?? null,
-          theme: sourceBook.theme,
+          theme:
+            sourceBook.theme && typeof sourceBook.theme === "object"
+              ? {
+                  ...(sourceBook.theme as Record<string, unknown>),
+                  ...(importPageAspectRatio ? { pageAspectRatio: importPageAspectRatio } : {}),
+                }
+              : importPageAspectRatio
+                ? { pageAspectRatio: importPageAspectRatio }
+                : sourceBook.theme,
         })
         .returning({ id: storybooks.id, slug: storybooks.slug });
 
