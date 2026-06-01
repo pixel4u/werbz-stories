@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { getAssetUrl } from "@/lib/asset-url";
 import { CropOverlayEditor, type DetectedCard } from "@/components/studio/crop-overlay-editor";
 
 interface ContactSheetUploadFormProps {
