@@ -1,6 +1,7 @@
+/* eslint-disable react-hooks/refs */
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 export type DetectedCardLabel = "cover" | "end" | "page" | "unknown";
 
@@ -329,23 +330,25 @@ export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange 
   const [gridRows, setGridRows] = useState(4);
   const [gridMargin, setGridMargin] = useState(24);
   const [gridGutter, setGridGutter] = useState(12);
-  const imageRef = useRef<HTMLImageElement | null>(null);
   const [displaySize, setDisplaySize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const editRef = useRef<{
+    mode: "move" | "resize";
+    id: string;
+    handle?: "n" | "s" | "e" | "w" | "nw" | "ne" | "sw" | "se";
+    startClientX: number;
+    startClientY: number;
+    startBox: { x: number; y: number; width: number; height: number };
+  } | null>(null);
 
   useEffect(() => {
     onChange?.(toPublicShape(cards));
   }, [cards, onChange]);
 
-  function measureDisplayedImage() {
-    if (!imageRef.current) return;
-    const rect = imageRef.current.getBoundingClientRect();
+  const measureDisplayedImageFromElement = useCallback((element: HTMLImageElement) => {
+    const rect = element.getBoundingClientRect();
     setDisplaySize({ width: rect.width, height: rect.height });
-  }
-
-  useEffect(() => {
-    const onResize = () => measureDisplayedImage();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
   }, []);
 
   const cardById = useMemo(() => new Map(cards.map((c) => [c._id, c])), [cards]);
@@ -396,9 +399,30 @@ export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange 
     setCards((prev) => normalizeCards(prev.map((c) => (c._id === id ? { ...c, ...patch } : c))));
   }
 
+  const updateCardBox = useCallback((
+    id: string,
+    updater: (box: { x: number; y: number; width: number; height: number }) => { x: number; y: number; width: number; height: number }
+  ) => {
+    const minSize = 20;
+    setCards((prev) =>
+      normalizeCards(
+        prev.map((c) => {
+          if (c._id !== id) return c;
+          const next = updater(c.box);
+          const clampedX = clamp(next.x, 0, imageWidth - minSize);
+          const clampedY = clamp(next.y, 0, imageHeight - minSize);
+          const clampedW = clamp(next.width, minSize, imageWidth - clampedX);
+          const clampedH = clamp(next.height, minSize, imageHeight - clampedY);
+          return { ...c, box: { x: clampedX, y: clampedY, width: clampedW, height: clampedH } };
+        })
+      )
+    );
+  }, [imageHeight, imageWidth]);
+
   function deleteCard(id: string) {
     setCards((prev) => normalizeCards(prev.filter((c) => c._id !== id)));
     setManualOrderIds((prev) => (prev ? prev.filter((x) => x !== id) : prev));
+    setSelectedId((prev) => (prev === id ? null : prev));
   }
 
   function addCardManually() {
@@ -420,6 +444,7 @@ export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange 
         },
       ])
     );
+    setSelectedId(null);
   }
 
   function applyProposedSort() {
@@ -475,7 +500,90 @@ export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange 
     setError(null);
     setRanDetection(true);
     setCardsFromDetected(generated);
+    setSelectedId(null);
   }
+
+  function beginMove(id: string, event: React.PointerEvent<HTMLDivElement>) {
+    const card = cardById.get(id);
+    if (!card) return;
+    setSelectedId(id);
+    event.preventDefault();
+    event.stopPropagation();
+    editRef.current = {
+      mode: "move",
+      id,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startBox: { ...card.box },
+    };
+  }
+
+  function beginResize(id: string, handle: "n" | "s" | "e" | "w" | "nw" | "ne" | "sw" | "se", event: React.PointerEvent<HTMLDivElement>) {
+    const card = cardById.get(id);
+    if (!card) return;
+    setSelectedId(id);
+    event.preventDefault();
+    event.stopPropagation();
+    editRef.current = {
+      mode: "resize",
+      id,
+      handle,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startBox: { ...card.box },
+    };
+  }
+
+  useEffect(() => {
+    function onMove(event: PointerEvent) {
+      const edit = editRef.current;
+      if (!edit) return;
+      const dx = scaleX === 0 ? 0 : (event.clientX - edit.startClientX) / scaleX;
+      const dy = scaleY === 0 ? 0 : (event.clientY - edit.startClientY) / scaleY;
+      if (edit.mode === "move") {
+        updateCardBox(edit.id, (box) => ({ ...box, x: Math.round(edit.startBox.x + dx), y: Math.round(edit.startBox.y + dy) }));
+        return;
+      }
+      const handle = edit.handle ?? "se";
+      updateCardBox(edit.id, () => {
+        let x = edit.startBox.x;
+        let y = edit.startBox.y;
+        let width = edit.startBox.width;
+        let height = edit.startBox.height;
+        if (handle.includes("e")) width = Math.round(edit.startBox.width + dx);
+        if (handle.includes("s")) height = Math.round(edit.startBox.height + dy);
+        if (handle.includes("w")) {
+          x = Math.round(edit.startBox.x + dx);
+          width = Math.round(edit.startBox.width - dx);
+        }
+        if (handle.includes("n")) {
+          y = Math.round(edit.startBox.y + dy);
+          height = Math.round(edit.startBox.height - dy);
+        }
+        return { x, y, width, height };
+      });
+    }
+    function onUp() {
+      editRef.current = null;
+    }
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, [scaleX, scaleY, updateCardBox]);
+
+  const resizeHandles: Array<{ key: "n" | "s" | "e" | "w" | "nw" | "ne" | "sw" | "se"; style: CSSProperties; cursor: string }> = [
+    { key: "nw", style: { left: -6, top: -6 }, cursor: "nwse-resize" },
+    { key: "ne", style: { right: -6, top: -6 }, cursor: "nesw-resize" },
+    { key: "sw", style: { left: -6, bottom: -6 }, cursor: "nesw-resize" },
+    { key: "se", style: { right: -6, bottom: -6 }, cursor: "nwse-resize" },
+    { key: "n", style: { left: "50%", top: -6, transform: "translateX(-50%)" }, cursor: "ns-resize" },
+    { key: "s", style: { left: "50%", bottom: -6, transform: "translateX(-50%)" }, cursor: "ns-resize" },
+    { key: "e", style: { right: -6, top: "50%", transform: "translateY(-50%)" }, cursor: "ew-resize" },
+    { key: "w", style: { left: -6, top: "50%", transform: "translateY(-50%)" }, cursor: "ew-resize" },
+  ];
 
   return (
     <div style={{ border: "1px solid #dbe3ef", borderRadius: 10, padding: "0.75rem", background: "#fff" }}>
@@ -491,6 +599,9 @@ export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange 
           <button type="button" onClick={applyProposedSort} style={{ padding: "0.4rem 0.65rem", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer", fontSize: 12 }}>
             Re-sort by role/number
           </button>
+          <button type="button" onClick={() => setIsFullscreen(true)} style={{ padding: "0.4rem 0.65rem", borderRadius: 8, border: "1px solid #1d4ed8", background: "#dbeafe", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+            Full screen editor
+          </button>
         </div>
       </div>
 
@@ -498,19 +609,37 @@ export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange 
         Ordering rule: Cover first, End last, numbered pages ascending, then visual-position fallback.
       </p>
 
-      <div style={{ position: "relative", width: "100%", border: "1px solid #e5e7eb", borderRadius: 8, overflow: "hidden", background: "#f8fafc" }}>
-        <img ref={imageRef} src={sheetUrl} alt="Contact sheet" onLoad={measureDisplayedImage} style={{ width: "100%", height: "auto", display: "block" }} />
+      <div style={{ position: "relative", width: "100%", border: "1px solid #e5e7eb", borderRadius: 8, overflow: "hidden", background: "#f8fafc", maxHeight: 560 }}>
+        <img src={sheetUrl} alt="Contact sheet" onLoad={(event) => measureDisplayedImageFromElement(event.target as HTMLImageElement)} style={{ width: "100%", height: "auto", display: "block" }} />
         {displaySize.width > 0
           ? cards.map((card) => {
               const left = card.box.x * scaleX;
               const top = card.box.y * scaleY;
               const width = card.box.width * scaleX;
               const height = card.box.height * scaleY;
+              const isSelected = selectedId === card._id;
               return (
-                <div key={card._id} style={{ position: "absolute", left, top, width, height, border: "2px solid #2563eb", boxShadow: "0 0 0 1px rgba(255,255,255,0.7) inset", pointerEvents: "none" }}>
-                  <span style={{ position: "absolute", top: -22, left: 0, background: "#2563eb", color: "#fff", borderRadius: 6, padding: "2px 6px", fontSize: 11, fontWeight: 700 }}>
+                <div
+                  key={card._id}
+                  onPointerDown={(event) => beginMove(card._id, event)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setSelectedId(card._id);
+                  }}
+                  style={{ position: "absolute", left, top, width, height, border: isSelected ? "3px solid #2563eb" : "2px solid #60a5fa", boxShadow: "0 0 0 1px rgba(255,255,255,0.7) inset", cursor: "move", pointerEvents: "auto" }}
+                >
+                  <span style={{ position: "absolute", top: -22, left: 0, background: isSelected ? "#1d4ed8" : "#2563eb", color: "#fff", borderRadius: 6, padding: "2px 6px", fontSize: 11, fontWeight: 700 }}>
                     {card.label === "page" && card.pageNumber ? `Page ${card.pageNumber}` : card.label}
                   </span>
+                  {isSelected
+                    ? resizeHandles.map((handle) => (
+                        <div
+                          key={`${card._id}-${handle.key}`}
+                          onPointerDown={(event) => beginResize(card._id, handle.key, event)}
+                          style={{ position: "absolute", width: 12, height: 12, borderRadius: 999, background: "#fff", border: "2px solid #1d4ed8", ...handle.style, cursor: handle.cursor }}
+                        />
+                      ))
+                    : null}
                 </div>
               );
             })
@@ -552,7 +681,20 @@ export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange 
           </div>
           <div style={{ display: "grid", gap: "0.55rem" }}>
             {orderedCards.map((card, idx) => (
-              <div key={`review-${card._id}`} style={{ display: "grid", gridTemplateColumns: "auto 130px 100px 90px 1fr auto auto auto auto", gap: "0.45rem", alignItems: "center", border: "1px solid #e5e7eb", borderRadius: 8, padding: "0.45rem" }}>
+              <div
+                key={`review-${card._id}`}
+                onClick={() => setSelectedId(card._id)}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "auto 130px 100px 90px 1fr auto auto auto auto",
+                  gap: "0.45rem",
+                  alignItems: "center",
+                  border: selectedId === card._id ? "2px solid #2563eb" : "1px solid #e5e7eb",
+                  borderRadius: 8,
+                  padding: "0.45rem",
+                  background: selectedId === card._id ? "#eff6ff" : "#fff",
+                }}
+              >
                 <div style={{ fontSize: 11, color: "#64748b", width: 22, textAlign: "center" }}>{idx + 1}</div>
                 <div style={cropThumbStyle(sheetUrl, imageWidth, imageHeight, card)} />
                 <select value={card.label} onChange={(e) => updateCard(card._id, { label: e.target.value as DetectedCardLabel })} style={{ padding: "0.35rem", borderRadius: 6, border: "1px solid #d1d5db", fontSize: 12 }}>
@@ -574,6 +716,59 @@ export function CropOverlayEditor({ sheetUrl, imageWidth, imageHeight, onChange 
                 <button type="button" onClick={() => deleteCard(card._id)} style={{ padding: "0.3rem 0.45rem", borderRadius: 6, border: "1px solid #ef4444", background: "#fff", color: "#b91c1c", cursor: "pointer", fontSize: 12 }}>Delete</button>
               </div>
             ))}
+          </div>
+        </div>
+      ) : null}
+
+      {isFullscreen ? (
+        <div style={{ position: "fixed", inset: 0, zIndex: 120, background: "rgba(15,23,42,.82)", padding: "1rem", display: "grid" }}>
+          <div style={{ background: "#fff", borderRadius: 14, padding: "0.8rem", display: "grid", gridTemplateRows: "auto 1fr", overflow: "hidden" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+              <strong>Full-screen Crop Frame Editor</strong>
+              <button type="button" onClick={() => setIsFullscreen(false)} style={{ padding: "0.45rem 0.75rem", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer" }}>
+                Close
+              </button>
+            </div>
+            <div style={{ overflow: "auto" }}>
+              <div style={{ minHeight: "80vh" }}>
+                <div style={{ position: "relative", width: "100%", border: "1px solid #e5e7eb", borderRadius: 8, overflow: "hidden", background: "#f8fafc" }}>
+                  <img src={sheetUrl} alt="Contact sheet full size" onLoad={(event) => measureDisplayedImageFromElement(event.target as HTMLImageElement)} style={{ width: "100%", height: "auto", display: "block" }} />
+                  {displaySize.width > 0
+                    ? cards.map((card) => {
+                        const left = card.box.x * scaleX;
+                        const top = card.box.y * scaleY;
+                        const width = card.box.width * scaleX;
+                        const height = card.box.height * scaleY;
+                        const isSelected = selectedId === card._id;
+                        return (
+                          <div
+                            key={`full-${card._id}`}
+                            onPointerDown={(event) => beginMove(card._id, event)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setSelectedId(card._id);
+                            }}
+                            style={{ position: "absolute", left, top, width, height, border: isSelected ? "3px solid #2563eb" : "2px solid #60a5fa", boxShadow: "0 0 0 1px rgba(255,255,255,0.7) inset", cursor: "move", pointerEvents: "auto" }}
+                          >
+                            <span style={{ position: "absolute", top: -22, left: 0, background: isSelected ? "#1d4ed8" : "#2563eb", color: "#fff", borderRadius: 6, padding: "2px 6px", fontSize: 11, fontWeight: 700 }}>
+                              {card.label === "page" && card.pageNumber ? `Page ${card.pageNumber}` : card.label}
+                            </span>
+                            {isSelected
+                              ? resizeHandles.map((handle) => (
+                                  <div
+                                    key={`full-${card._id}-${handle.key}`}
+                                    onPointerDown={(event) => beginResize(card._id, handle.key, event)}
+                                    style={{ position: "absolute", width: 12, height: 12, borderRadius: 999, background: "#fff", border: "2px solid #1d4ed8", ...handle.style, cursor: handle.cursor }}
+                                  />
+                                ))
+                              : null}
+                          </div>
+                        );
+                      })
+                    : null}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       ) : null}
