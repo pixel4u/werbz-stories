@@ -293,7 +293,7 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
       ) : null}
 
       {showConfirm && result ? (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.46)", zIndex: 70, display: "grid", placeItems: "center", padding: "1.2rem" }}>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.46)", zIndex: 200, display: "grid", placeItems: "center", padding: "1.2rem" }}>
           <div style={{ width: "min(520px, 100%)", background: "#fff", borderRadius: 14, boxShadow: "0 20px 60px rgba(15,23,42,.28)", padding: "1rem" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.8rem" }}>
               <h2 style={{ margin: 0, fontSize: 18 }}>Confirm Import</h2>
