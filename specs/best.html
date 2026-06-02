@@ -88,6 +88,8 @@
     align-items:center;
     gap:22px;
   }
+  /* RTL: put the advance (next) control on the left, mirroring the book. */
+  .ui.rtl{ flex-direction:row-reverse; }
   button.nav{
     width:46px;
     height:46px;
@@ -282,6 +284,7 @@ function normalizeStorybookFromApi(payload){
     typeof rawPageRatio === "number" && Number.isFinite(rawPageRatio)
       ? clamp(rawPageRatio, 0.55, 1.9)
       : (1 / 1.42);
+  const dir = String((sb.theme && sb.theme.direction) || sb.direction || "ltr").toLowerCase();
   return {
     id: sb.id || DEFAULT_STORYBOOK.id,
     slug: sb.slug || storySlug,
@@ -290,6 +293,7 @@ function normalizeStorybookFromApi(payload){
     coverAssetId: effectiveCoverAssetId,
     author: DEFAULT_STORYBOOK.author,
     theme: sb.theme || DEFAULT_STORYBOOK.theme,
+    direction: dir === "rtl" ? "rtl" : "ltr",
     pageAspectRatio,
     cover: {
       kicker: "Stories",
@@ -351,12 +355,31 @@ PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.LINEAR;
 const root = new PIXI.Container();
 app.stage.addChild(root);
 
+// RTL (Hebrew) support: the entire book scene is mirrored about the spine
+// (scene-local x=0) so the book opens from the left and pages turn the other
+// way. Page TEXTURES are counter-flipped in drawFace() so text/images stay
+// upright (never mirrored). Reading direction comes from the storybook
+// theme.direction === "rtl"; default is LTR.
+let RTL = false;
+const dirSign = () => (RTL ? -1 : 1);
+
+const scene = new PIXI.Container();
+root.addChild(scene);
+
 const floorLayer = new PIXI.Container();
 const stackLayer = new PIXI.Container();
 const activeLayer = new PIXI.Container();
 const chromeLayer = new PIXI.Container();
 
-root.addChild(floorLayer, stackLayer, activeLayer, chromeLayer);
+scene.addChild(floorLayer, stackLayer, activeLayer, chromeLayer);
+
+function applyReadingDirection(){
+  // Mirror about the spine (scene local origin). Spine stays centered; the page
+  // block and curl visually flip to the RTL side.
+  scene.scale.x = RTL ? -1 : 1;
+  const ui = document.querySelector(".ui");
+  if (ui) ui.classList.toggle("rtl", RTL);
+}
 
 /* ============================================================
    SIZING
@@ -500,10 +523,13 @@ function textureForFace(face, side){
 function drawFace(ctx,w,h,face,side,bgImage){
   ctx.clearRect(0,0,w,h);
 
-  // The PixiJS mesh flips horizontally in screen space.
-  // Back-side textures must be pre-flipped on the canvas so the final result
-  // is readable to the viewer, not mirrored/inverted.
-  if(side === "back"){
+  // The PixiJS mesh flips back-side textures horizontally in screen space, so
+  // back faces are pre-flipped on the canvas to read correctly. In RTL the whole
+  // scene is mirrored (scene.scale.x = -1), which flips EVERY face on screen, so
+  // we invert the pre-flip (front gets flipped, back does not). Net effect: page
+  // content always reads upright regardless of direction.
+  const preFlip = (side === "back") !== RTL; // XOR
+  if(preFlip){
     ctx.save();
     ctx.translate(w,0);
     ctx.scale(-1,1);
@@ -1424,8 +1450,11 @@ function updateRootShift(){
 }
 
 function closedShiftFor(f){
-  if(f <= 0) return -PAGE_W/2;
-  if(f >= leaves.length) return PAGE_W/2;
+  // The scene mirrors about the spine in RTL, but this shift is applied to
+  // root.x (outside the mirror), so flip its sign for RTL so the closed cover
+  // sits on the correct side and recenters when open.
+  if(f <= 0) return -PAGE_W/2 * dirSign();
+  if(f >= leaves.length) return PAGE_W/2 * dirSign();
   return 0;
 }
 
@@ -1723,7 +1752,9 @@ function tick(){
 app.view.addEventListener("pointerdown",(e)=>{
   if(active) return;
 
-  const forward = e.clientX > window.innerWidth/2;
+  // LTR: grab from the right half to go forward. RTL mirrors the book, so
+  // forward is grabbed from the left half.
+  const forward = RTL ? (e.clientX < window.innerWidth/2) : (e.clientX > window.innerWidth/2);
 
   if(forward && flipped >= leaves.length) return;
   if(!forward && flipped <= 0) return;
@@ -1776,7 +1807,9 @@ app.view.addEventListener("pointerdown",(e)=>{
 app.view.addEventListener("pointermove",(e)=>{
   if(!drag || e.pointerId !== drag.pointerId) return;
 
-  const dx = e.clientX - drag.startX;
+  // In RTL the scene is mirrored, so the page follows the cursor in the opposite
+  // horizontal direction — invert dx so drag still feels natural.
+  const dx = (e.clientX - drag.startX) * dirSign();
   drag.moved = Math.max(drag.moved, Math.abs(dx));
 
   let p;
@@ -1852,12 +1885,17 @@ prevBtn.addEventListener("click",goPrev);
 nextBtn.addEventListener("click",goNext);
 
 window.addEventListener("keydown",(e)=>{
-  if(e.key === "ArrowRight" || e.key === " "){
+  // Spacebar always advances. Arrows follow reading direction: in RTL,
+  // ArrowLeft advances and ArrowRight goes back.
+  if(e.key === " "){
     e.preventDefault();
     goNext();
+  }else if(e.key === "ArrowRight"){
+    e.preventDefault();
+    RTL ? goPrev() : goNext();
   }else if(e.key === "ArrowLeft"){
     e.preventDefault();
-    goPrev();
+    RTL ? goNext() : goPrev();
   }else if(e.key.toLowerCase() === "d"){
     document.body.classList.toggle("debug");
     updateUI();
@@ -2046,6 +2084,8 @@ async function loadStorybookFromApi(){
 
 async function init(){
   await loadStorybookFromApi();
+  RTL = STORYBOOK.direction === "rtl";
+  applyReadingDirection();
   const titleTag = document.getElementById("titleTag");
   if (titleTag) titleTag.textContent = STORYBOOK.title || DEFAULT_STORYBOOK.title;
   const faces = buildFaces(STORYBOOK);

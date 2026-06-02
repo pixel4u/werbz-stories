@@ -53,9 +53,11 @@ async function updateStorybookAction(formData: FormData) {
     | "draft"
     | "published";
   const coverAssetId = String(formData.get("coverAssetId") ?? "");
+  const direction = (String(formData.get("direction") ?? "ltr") === "rtl" ? "rtl" : "ltr") as "ltr" | "rtl";
 
-  await updateStorybookMeta({ id, title, slug, summary, status, coverAssetId });
+  await updateStorybookMeta({ id, title, slug, summary, status, coverAssetId, direction });
   revalidatePath("/studio");
+  revalidatePath(`/api/storybooks`);
   redirect("/studio");
 }
 
@@ -208,6 +210,13 @@ export default async function StudioPage({
                   <option value="draft">draft</option>
                   <option value="published">published</option>
                 </select>
+                <label style={{ display: "grid", gap: "0.25rem", fontSize: 13, color: "#374151" }}>
+                  Reading direction
+                  <select name="direction" defaultValue={book.direction} style={{ padding: "0.5rem" }}>
+                    <option value="ltr">Left to right (English)</option>
+                    <option value="rtl">Right to left (Hebrew)</option>
+                  </select>
+                </label>
                 <button type="submit" style={{ padding: "0.6rem", cursor: "pointer" }}>
                   Save Metadata
                 </button>

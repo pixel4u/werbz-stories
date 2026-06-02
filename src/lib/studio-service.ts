@@ -16,6 +16,7 @@ export interface StudioStorybookRow {
   coverAssetId: string | null;
   coverPageId: string | null;
   endPageId: string | null;
+  direction: "ltr" | "rtl";
   updatedAt: Date;
   pageCount: number;
   viewCount: number;
@@ -91,6 +92,7 @@ export async function listStudioStorybooks(): Promise<StudioStorybookRow[]> {
       coverAssetId: storybooks.coverAssetId,
       coverPageId: storybooks.coverPageId,
       endPageId: storybooks.endPageId,
+      theme: storybooks.theme,
       updatedAt: storybooks.updatedAt,
       pageCount: sql<number>`count(distinct ${pages.id})::int`,
       viewCount: sql<number>`count(distinct ${viewEvents.id})::int`,
@@ -107,11 +109,20 @@ export async function listStudioStorybooks(): Promise<StudioStorybookRow[]> {
       storybooks.coverAssetId,
       storybooks.coverPageId,
       storybooks.endPageId,
+      storybooks.theme,
       storybooks.updatedAt
     )
     .orderBy(asc(storybooks.title));
 
-  return rows.map((row) => ({ ...row, pageCount: Number(row.pageCount), viewCount: Number(row.viewCount) }));
+  return rows.map(({ theme, ...row }) => {
+    const dir = (theme as Record<string, unknown> | null)?.direction;
+    return {
+      ...row,
+      direction: dir === "rtl" ? ("rtl" as const) : ("ltr" as const),
+      pageCount: Number(row.pageCount),
+      viewCount: Number(row.viewCount),
+    };
+  });
 }
 
 export async function getStudioStorybookById(id: string): Promise<StudioStorybookDetail | null> {
@@ -151,6 +162,7 @@ export async function getStudioStorybookById(id: string): Promise<StudioStoryboo
     coverAssetId: storybook.coverAssetId,
     coverPageId: pointers.coverPageId,
     endPageId: pointers.endPageId,
+    direction: (storybook.theme as Record<string, unknown> | null)?.direction === "rtl" ? "rtl" : "ltr",
     updatedAt: storybook.updatedAt,
     pageCount: ordered.length,
     viewCount: Number(viewCountRows[0]?.count ?? 0),
@@ -185,12 +197,25 @@ export interface UpdateStorybookMetaInput {
   summary: string;
   status: "draft" | "published";
   coverAssetId: string;
+  direction?: "ltr" | "rtl";
 }
 
 export async function updateStorybookMeta(input: UpdateStorybookMetaInput): Promise<void> {
   const db = getDb();
   const safeTitle = input.title.trim() || "Untitled Storybook";
   const safeSlug = await generateUniqueSlug(input.slug || safeTitle, input.id);
+
+  // Reading direction is stored inside the existing theme jsonb (no schema
+  // change). Read-modify-write so other theme keys are preserved.
+  const existing = await db
+    .select({ theme: storybooks.theme })
+    .from(storybooks)
+    .where(eq(storybooks.id, input.id))
+    .limit(1);
+  const currentTheme = (existing[0]?.theme as Record<string, unknown> | null) ?? {};
+  const nextTheme: Record<string, unknown> = { ...currentTheme };
+  if (input.direction === "rtl") nextTheme.direction = "rtl";
+  else delete nextTheme.direction; // LTR is the default; don't store it
 
   await db
     .update(storybooks)
@@ -200,6 +225,7 @@ export async function updateStorybookMeta(input: UpdateStorybookMetaInput): Prom
       summary: input.summary.trim() || null,
       status: input.status,
       coverAssetId: input.coverAssetId.trim() || null,
+      theme: Object.keys(nextTheme).length ? nextTheme : null,
       updatedAt: new Date(),
     })
     .where(eq(storybooks.id, input.id));
