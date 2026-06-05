@@ -24,6 +24,8 @@ import { ContactSheetUploadForm } from "@/components/studio/contact-sheet-upload
 import { CopyLinkButton } from "@/components/studio/copy-link-button";
 import { getAssetUrl } from "@/lib/asset-url";
 
+export const dynamic = "force-dynamic";
+
 interface Props {
   params: Promise<{ id: string }>;
   searchParams: Promise<{ page?: string; mode?: string; reorder?: string; upload?: string; published?: string; saved?: string }>;

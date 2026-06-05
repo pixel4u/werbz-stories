@@ -6,9 +6,9 @@ Standalone Stories platform for `werbz.com`.
 
 Production is live with:
 - Public Library at `/`
-- OTP-gated Story Reader at `/[slug]`
+- Public Story Reader at `/[slug]`
 - 3D Book viewer (active engine: `specs/best.html`, see below)
-- Studio auth + dashboard CRUD at `/studio`
+- Open Studio dashboard CRUD at `/studio`
 - Studio page editor CRUD at `/studio/[id]`
 - Studio analytics at `/studio/analytics`
 - Local VPS file uploads for image assets (Prompt 5)
@@ -40,10 +40,10 @@ Production is live with:
 ## Routes
 
 - `/` public published stories library
-- `/studio` owner dashboard (auth required)
-- `/studio/[id]` story page editor (auth required)
-- `/studio/analytics` analytics (auth required)
-- `/[slug]` public story reader (OTP-gated)
+- `/studio` open dashboard
+- `/studio/[id]` open story page editor
+- `/studio/analytics` open analytics
+- `/[slug]` public story reader
 
 API:
 - `GET /api/storybooks` (published only)
@@ -66,8 +66,8 @@ Core:
 - `NEXT_PUBLIC_APP_URL`
 - `UPLOADS_DIR` (optional; defaults to `./uploads`)
 
-OTP / email:
-- `RESEND_API_KEY` (or alternate provider vars if supported)
+Optional email / legacy viewer tracking:
+- `RESEND_API_KEY` (only needed if OTP is re-enabled later)
 - `EMAIL_FROM`
 
 ## Local Setup

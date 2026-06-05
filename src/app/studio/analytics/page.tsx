@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { isStudioAuthenticated } from "@/lib/studio-auth";
 import { getStudioAnalyticsSummary } from "@/lib/viewer-service";
 
+export const dynamic = "force-dynamic";
+
 export default async function StudioAnalyticsPage() {
   const authenticated = await isStudioAuthenticated();
   if (!authenticated) redirect("/studio");

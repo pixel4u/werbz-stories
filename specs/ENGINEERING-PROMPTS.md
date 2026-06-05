@@ -14,10 +14,10 @@ References:
 Completed:
 - Prompt 1: foundations + DB + seed + API
 - Prompt 2: data-driven 3D reader
-- Prompt 3: Studio auth + dashboard CRUD
+- Prompt 3: Studio dashboard CRUD
 - Prompt 4: Studio page editor CRUD/reorder
 - Prompt 5: image uploads (local fallback storage)
-- Prompt 7: library + OTP + analytics
+- Prompt 7: library + analytics
 
 Remaining major work:
 - Prompt 6 live embed behavior enhancements
@@ -48,7 +48,7 @@ Rules:
 
 ## Prompt 3 (done)
 
-- `/studio` auth via env password + signed httpOnly cookie
+- `/studio` dashboard
 - dashboard CRUD for storybooks
 
 ## Prompt 4 (done)
@@ -68,7 +68,7 @@ Rules:
 ## Prompt 7 (done)
 
 - Public Library at `/`
-- OTP gate for reader flow
+- public reader flow
 - viewer cookie verify flow
 - analytics page + CSV export
 
@@ -89,4 +89,4 @@ Never:
 Prompt 6 continuation:
 - Improve embed live mode with settle/unsettle mount control
 - keep flip performance intact
-- maintain existing OTP/library/studio behavior
+- maintain existing library/studio behavior

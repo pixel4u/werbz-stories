@@ -5,10 +5,10 @@ Standalone Stories platform for `werbz.com` root.
 ## Production Route Map
 
 - `/` public Stories library (published only)
-- `/studio` owner dashboard
-- `/studio/[id]` owner page editor
-- `/studio/analytics` owner analytics
-- `/[slug]` public story reader (OTP-gated)
+- `/studio` public dashboard
+- `/studio/[id]` public page editor
+- `/studio/analytics` public analytics
+- `/[slug]` public story reader
 
 No `/stories` prefix.
 
@@ -20,7 +20,7 @@ Completed:
 3. Prompt 3 Studio auth + Storybook CRUD
 4. Prompt 4 Studio page editor CRUD + reorder
 5. Prompt 5 image uploads (local VPS fallback)
-6. Prompt 7 library + OTP gate + analytics
+6. Prompt 7 library + analytics
 7. UX polish pass
 
 Pending / later:
@@ -35,7 +35,7 @@ Pending / later:
 - PostgreSQL + Drizzle ORM
 - Route Handlers for public/API endpoints
 - Server Actions for Studio mutations
-- Resend (configured in prod) for OTP email
+- Resend (optional; only needed if OTP is re-enabled)
 - Hostinger VPS + PM2 + Caddy
 
 ## Data Model

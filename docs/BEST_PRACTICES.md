@@ -15,8 +15,8 @@
 ## Security
 
 - Never log secrets.
-- Use signed httpOnly cookies for Studio and viewer verification.
-- Store OTP as secure hash with expiry; never raw OTP.
+- Keep Studio/public-reader access expectations explicit in docs and deploy notes.
+- Store OTP as secure hash with expiry if the legacy gate is ever re-enabled.
 - Keep uploads constrained by mime and size.
 
 ## Frontend/Viewer

@@ -4,8 +4,8 @@
 
 A standalone Stories platform at `werbz.com` with:
 - public library
-- OTP-gated story reading
-- owner Studio + editor + analytics
+- public story reading
+- open Studio + editor + analytics
 
 ## Critical Constraints
 
@@ -47,10 +47,9 @@ pm2 status
 
 Manual:
 - `/` library loads
-- `/studio` login works
+- `/studio` opens directly
 - `/studio/analytics` loads
-- private window `/the-lighthouse` shows OTP gate
-- verified flow unlocks book
+- private window `/the-lighthouse` opens the reader directly
 
 ## Key Files
 

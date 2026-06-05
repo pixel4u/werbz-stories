@@ -3,12 +3,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import {
-  clearStudioSessionCookie,
-  isStudioAuthenticated,
-  requireStudioPassword,
-  setStudioSessionCookie,
-} from "@/lib/studio-auth";
-import {
   createStorybook,
   deleteStorybook,
   duplicateStorybook,
@@ -19,22 +13,7 @@ import {
 import { DeleteStorybookForm } from "@/components/studio/delete-storybook-form";
 import { CoverUploadForm } from "@/components/studio/cover-upload-form";
 
-async function loginAction(formData: FormData) {
-  "use server";
-  const password = String(formData.get("password") ?? "");
-  const ok = await requireStudioPassword(password);
-  if (!ok) {
-    redirect("/studio?error=invalid-password");
-  }
-  await setStudioSessionCookie();
-  redirect("/studio");
-}
-
-async function logoutAction() {
-  "use server";
-  await clearStudioSessionCookie();
-  redirect("/studio");
-}
+export const dynamic = "force-dynamic";
 
 async function createStorybookAction() {
   "use server";
@@ -102,36 +81,7 @@ function isPlaceholderCoverAsset(assetId: string | null): boolean {
   return !!assetId && assetId.startsWith("asset-cover-");
 }
 
-function LoginView({ error }: { error?: string }) {
-  return (
-    <main style={{ maxWidth: 420, margin: "3rem auto", padding: "2rem", fontFamily: "system-ui, sans-serif" }}>
-      <h1 style={{ marginBottom: "1rem" }}>Studio Login</h1>
-      <form action={loginAction} style={{ display: "grid", gap: "0.8rem" }}>
-        <label htmlFor="password">Owner Password</label>
-        <input id="password" name="password" type="password" required style={{ padding: "0.6rem" }} />
-        <button type="submit" style={{ padding: "0.7rem", cursor: "pointer" }}>
-          Login
-        </button>
-      </form>
-      {error === "invalid-password" ? (
-        <p style={{ color: "#b91c1c", marginTop: "0.8rem" }}>Incorrect password.</p>
-      ) : null}
-    </main>
-  );
-}
-
-export default async function StudioPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string }>;
-}) {
-  const authenticated = await isStudioAuthenticated();
-  const params = await searchParams;
-
-  if (!authenticated) {
-    return <LoginView error={params.error} />;
-  }
-
+export default async function StudioPage() {
   const books = await listStudioStorybooks();
 
   return (
@@ -148,11 +98,6 @@ export default async function StudioPage({
           <form action={createStorybookAction}>
             <button type="submit" style={{ padding: "0.6rem 1rem", cursor: "pointer" }}>
               New Storybook
-            </button>
-          </form>
-          <form action={logoutAction}>
-            <button type="submit" style={{ padding: "0.6rem 1rem", cursor: "pointer" }}>
-              Logout
             </button>
           </form>
         </div>

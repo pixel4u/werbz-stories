@@ -16,9 +16,9 @@
 ## Implemented
 
 - Public library (`/`)
-- Story reader (`/[slug]`) with OTP gate
+- Public story reader (`/[slug]`)
 - 3D book runtime with data-driven pages
-- Studio auth (`/studio`)
+- Open Studio (`/studio`)
 - Studio CRUD
 - Studio page editor (`/studio/[id]`)
 - Studio analytics + CSV
