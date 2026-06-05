@@ -21,6 +21,7 @@
 /build
 /uploads
 /test-results
+/backups
 
 # misc
 .DS_Store
