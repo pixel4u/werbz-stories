@@ -90,6 +90,42 @@
   }
   /* RTL: put the advance (next) control on the left, mirroring the book. */
   .ui.rtl{ flex-direction:row-reverse; }
+  .end-cta{
+    position:fixed;
+    right:max(18px, env(safe-area-inset-right));
+    bottom:calc(max(14px, env(safe-area-inset-bottom)) + 72px);
+    z-index:12;
+    opacity:0;
+    transform:translateY(10px);
+    pointer-events:none;
+    transition:opacity .22s ease, transform .22s ease;
+  }
+  .end-cta.show{
+    opacity:1;
+    transform:translateY(0);
+    pointer-events:auto;
+  }
+  .end-cta a{
+    display:inline-flex;
+    align-items:center;
+    gap:10px;
+    padding:12px 16px;
+    border-radius:999px;
+    text-decoration:none;
+    color:#f7efdd;
+    border:1px solid rgba(255,255,255,.18);
+    background:rgba(14,17,22,.62);
+    backdrop-filter:blur(12px);
+    box-shadow:0 16px 36px rgba(0,0,0,.28);
+    font-size:12px;
+    font-weight:700;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+  }
+  .end-cta a:hover{
+    background:rgba(255,255,255,.14);
+    transform:translateY(-1px);
+  }
   button.nav{
     width:46px;
     height:46px;
@@ -168,6 +204,9 @@
 
 <div class="title-tag" id="titleTag">The Lantern of the Quiet Wood</div>
 <div class="hint" id="hint">Drag the page edge or use arrows</div>
+<div class="end-cta" id="endCta">
+  <a href="/" aria-label="Go back to main site">Go back to main site</a>
+</div>
 
 <div class="ui">
   <button class="nav" id="prevBtn" aria-label="Previous page">
@@ -401,6 +440,55 @@ let flipped = 0;
 let active = null;
 let drag = null;
 let hasInteracted = false;
+
+function getBookLocalPoint(clientX, clientY){
+  return {
+    x: (clientX - root.x) * dirSign(),
+    y: clientY - root.y,
+  };
+}
+
+function revealClosedBookInterior(forward){
+  leaves.forEach((leaf) => {
+    leaf.container.visible = true;
+  });
+
+  if(forward && leaves[0]){
+    leaves[0].container.visible = true;
+    leaves[0].displaySide = "front";
+    leaves[0].front.mesh.visible = true;
+    leaves[0].back.mesh.visible = false;
+  }
+
+  if(!forward && leaves[leaves.length - 1]){
+    const lastLeaf = leaves[leaves.length - 1];
+    lastLeaf.container.visible = true;
+    lastLeaf.displaySide = "back";
+    lastLeaf.front.mesh.visible = false;
+    lastLeaf.back.mesh.visible = true;
+  }
+}
+
+function resolvePointerIntent(clientX, clientY){
+  const { x, y } = getBookLocalPoint(clientX, clientY);
+  const insideHeight = Math.abs(y) <= PAGE_H * 0.56;
+  if(!insideHeight) return null;
+
+  if(flipped === 0){
+    const insideClosedFront = x >= -PAGE_W * 0.06 && x <= PAGE_W * 1.02;
+    return insideClosedFront ? { forward: true } : null;
+  }
+
+  if(flipped === leaves.length){
+    const insideClosedBack = x <= PAGE_W * 0.06 && x >= -PAGE_W * 1.02;
+    return insideClosedBack ? { forward: false } : null;
+  }
+
+  const insideOpenSpread = x >= -PAGE_W * 1.02 && x <= PAGE_W * 1.02;
+  if(!insideOpenSpread) return null;
+
+  return { forward: x >= 0 };
+}
 
 /* ============================================================
    BUILD FACES / LEAVES
@@ -1273,47 +1361,47 @@ function updateLeafFX(leaf, progress, activeCurl, curl, lift){
   if(activeCurl && mid > 0.02){
     const elevation = clamp(mid, 0, 1);
     const phase = 1 - Math.abs(progress - 0.5) / 0.5; // 0 at ends, 1 at midpoint
-    const spreadness = 0.65 + elevation * 0.95 + phase * 0.40;
+    const spreadness = 0.60 + elevation * 1.08 + phase * 0.72;
 
     const centerX = lerp(PAGE_W * 0.28, -PAGE_W * 0.28, progress);
     const centerY = lift * 0.05;
 
     // Very broad ambient shadow
-    shadow.beginFill(0x000000, 0.028 + elevation * 0.040);
+    shadow.beginFill(0x000000, 0.038 + elevation * 0.050 + phase * 0.014);
     shadow.drawEllipse(
       centerX * 0.96,
       centerY + 10,
-      PAGE_W * (0.42 + spreadness * 0.34),
-      PAGE_H * (0.13 + spreadness * 0.05)
+      PAGE_W * (0.42 + spreadness * 0.40),
+      PAGE_H * (0.13 + spreadness * 0.06)
     );
     shadow.endFill();
 
     // Main body shadow under the lifted sheet
-    shadow.beginFill(0x000000, 0.040 + elevation * 0.085);
+    shadow.beginFill(0x000000, 0.052 + elevation * 0.105 + phase * 0.018);
     shadow.drawEllipse(
       centerX,
       centerY,
-      PAGE_W * (0.26 + spreadness * 0.20),
-      PAGE_H * (0.19 + spreadness * 0.06)
+      PAGE_W * (0.24 + spreadness * 0.24),
+      PAGE_H * (0.18 + spreadness * 0.07)
     );
     shadow.endFill();
 
     // Denser inner core shadow close to the page
-    shadow.beginFill(0x000000, 0.030 + elevation * 0.060);
+    shadow.beginFill(0x000000, 0.042 + elevation * 0.074 + phase * 0.018);
     shadow.drawEllipse(
       centerX * 0.88,
       centerY - 2,
-      PAGE_W * (0.18 + spreadness * 0.12),
-      PAGE_H * (0.12 + spreadness * 0.035)
+      PAGE_W * (0.17 + spreadness * 0.15),
+      PAGE_H * (0.11 + spreadness * 0.042)
     );
     shadow.endFill();
 
     // Soft spine contact darkening, kept broad and diffused
-    shadow.beginFill(0x000000, 0.012 + elevation * 0.020);
+    shadow.beginFill(0x000000, 0.018 + elevation * 0.024);
     shadow.drawRoundedRect(-36, -PAGE_H * 0.47, 72, PAGE_H * 0.94, 28);
     shadow.endFill();
 
-    shadow.filters = [new PIXI.BlurFilter(36 + elevation * 52, 7)];
+    shadow.filters = [new PIXI.BlurFilter(34 + elevation * 40 + phase * 24, 7)];
   }else{
     shadow.filters = null;
   }
@@ -1612,7 +1700,10 @@ function startAutoFlip(index,from,to,forward){
 
   // When opening from the closed cover, reveal the inner stack before the cover moves.
   if(forward && flipped === 0){
-    leaves.forEach(l => l.container.visible = true);
+    revealClosedBookInterior(true);
+  }
+  if(!forward && flipped === leaves.length){
+    revealClosedBookInterior(false);
   }
 
   // Reverse/left flips use a temporary proxy mesh. The real page stays hidden
@@ -1751,10 +1842,9 @@ function tick(){
 
 app.view.addEventListener("pointerdown",(e)=>{
   if(active) return;
-
-  // LTR: grab from the right half to go forward. RTL mirrors the book, so
-  // forward is grabbed from the left half.
-  const forward = RTL ? (e.clientX < window.innerWidth/2) : (e.clientX > window.innerWidth/2);
+  const intent = resolvePointerIntent(e.clientX, e.clientY);
+  if(!intent) return;
+  const { forward } = intent;
 
   if(forward && flipped >= leaves.length) return;
   if(!forward && flipped <= 0) return;
@@ -1766,14 +1856,10 @@ app.view.addEventListener("pointerdown",(e)=>{
   // when the user starts dragging the front cover open, reveal the inner stack
   // immediately so the right side is visible behind the cover instead of looking empty.
   if(forward && flipped === 0){
-    leaves.forEach(l => l.container.visible = true);
-    // Keep the front cover itself visible and on top.
-    if(leaves[0]){
-      leaves[0].container.visible = true;
-      leaves[0].displaySide = "front";
-      leaves[0].front.mesh.visible = true;
-      leaves[0].back.mesh.visible = false;
-    }
+    revealClosedBookInterior(true);
+  }
+  if(!forward && flipped === leaves.length){
+    revealClosedBookInterior(false);
   }
 
   drag = {
@@ -1920,6 +2006,11 @@ function updateUI(){
   });
 
   document.getElementById("hint").classList.toggle("hide", hasInteracted || flipped > 0);
+  const endCta = document.getElementById("endCta");
+  if(endCta){
+    const onLastPage = !active && flipped >= Math.max(0, leaves.length - 1);
+    endCta.classList.toggle("show", onLastPage);
+  }
 
   if(document.body.classList.contains("debug")){
     const state = flipped === 0 ? "CLOSED FRONT COVER" :
