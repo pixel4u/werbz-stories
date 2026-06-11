@@ -185,8 +185,6 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const allCards = preparedSheets.flatMap((sheet) => sheet.sortedCards);
     const coverCards = allCards.filter((c) => c.role === "cover");
     const endCards = allCards.filter((c) => c.role === "end");
-    const pageCards = allCards.filter((c) => c.role === "page");
-
     if (coverCards.length !== 1) {
       return NextResponse.json({ error: `Import requires exactly 1 cover card, found ${coverCards.length}` }, { status: 400 });
     }

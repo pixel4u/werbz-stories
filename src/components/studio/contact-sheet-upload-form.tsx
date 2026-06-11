@@ -31,24 +31,6 @@ function nextTabId(): string {
   return `sheet-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function clamp(n: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, n));
-}
-
-function cloneTemplateCards(template: DetectedCard[], imageWidth: number, imageHeight: number): DetectedCard[] {
-  return template.map((card, idx) => {
-    const width = clamp(card.box.width, 20, Math.max(20, imageWidth));
-    const height = clamp(card.box.height, 20, Math.max(20, imageHeight));
-    const x = clamp(card.box.x, 0, Math.max(0, imageWidth - width));
-    const y = clamp(card.box.y, 0, Math.max(0, imageHeight - height));
-    return {
-      ...card,
-      box: { x, y, width, height },
-      positionIndex: idx,
-    };
-  });
-}
-
 export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -57,11 +39,12 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [importBusy, setImportBusy] = useState(false);
   const [importError, setImportError] = useState("");
+  const [duplicateTargetId, setDuplicateTargetId] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
 
-  async function uploadOneFile(file: File, templateCards: DetectedCard[]) {
+  async function uploadOneFile(file: File) {
     const formData = new FormData();
     formData.set("file", file);
 
@@ -82,16 +65,11 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
       imageHeight: typeof payload.imageHeight === "number" ? payload.imageHeight : null,
     };
 
-    const seededCards =
-      result.imageWidth && result.imageHeight && templateCards.length > 0
-        ? cloneTemplateCards(templateCards, result.imageWidth, result.imageHeight)
-        : [];
-
     return {
       id: nextTabId(),
       fileName: file.name,
       result,
-      cards: seededCards,
+      cards: [],
       reviewConfirmed: false,
     } satisfies SheetTab;
   }
@@ -112,12 +90,9 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
     setBusy(true);
     try {
       const createdTabs: SheetTab[] = [];
-      let templateCards = activeTab?.cards?.length ? activeTab.cards : tabs[tabs.length - 1]?.cards ?? [];
-
       for (const file of allFiles) {
-        const newTab = await uploadOneFile(file, templateCards);
+        const newTab = await uploadOneFile(file);
         createdTabs.push(newTab);
-        templateCards = newTab.cards.length > 0 ? newTab.cards : templateCards;
       }
 
       setTabs((prev) => [...prev, ...createdTabs]);
@@ -146,6 +121,27 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
     setTabs((prev) => prev.map((tab) => (tab.id === tabId ? { ...tab, ...patch } : tab)));
   }
 
+  function duplicateFramesToTarget() {
+    if (!activeTab || !duplicateTargetId || duplicateTargetId === activeTab.id) return;
+    const copiedCards = activeTab.cards.map((card, idx) => ({
+      ...card,
+      box: { ...card.box },
+      positionIndex: idx,
+    }));
+
+    setTabs((prev) =>
+      prev.map((tab) =>
+        tab.id === duplicateTargetId
+          ? {
+              ...tab,
+              cards: copiedCards,
+              reviewConfirmed: false,
+            }
+          : tab
+      )
+    );
+  }
+
   const tabStats = useMemo(
     () =>
       tabs.map((tab) => {
@@ -167,6 +163,7 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
   );
 
   const activeStats = activeTab ? tabStats.find((stats) => stats.tabId === activeTab.id) ?? null : null;
+  const duplicateTargets = tabs.filter((tab) => tab.id !== activeTabId);
   const coverCount = tabStats.reduce((sum, stats) => sum + stats.coverCount, 0);
   const endCount = tabStats.reduce((sum, stats) => sum + stats.endCount, 0);
   const pageCount = tabStats.reduce((sum, stats) => sum + stats.pageCount, 0);
@@ -356,10 +353,42 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
             Import result preview: <strong>{importSummary}</strong>
           </p>
           <p style={{ margin: 0, fontSize: 12, color: "#64748b" }}>
-            Run detection and edit boxes here in full screen. New uploads inherit the previous sheet’s frame layout.
+            Run detection and edit boxes here in full screen. Each PNG tab keeps its own frame state until import time.
           </p>
           {error ? <p style={{ margin: 0, fontSize: 12, color: "#b91c1c" }}>{error}</p> : null}
           {importError ? <p style={{ margin: 0, fontSize: 12, color: "#b91c1c" }}>{importError}</p> : null}
+          {duplicateTargets.length > 0 ? (
+            <div style={{ display: "flex", gap: "0.45rem", alignItems: "center", flexWrap: "wrap" }}>
+              <select
+                value={duplicateTargetId}
+                onChange={(e) => setDuplicateTargetId(e.target.value)}
+                style={{ padding: "0.45rem 0.6rem", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", fontSize: 12 }}
+              >
+                <option value="">Copy frames to another PNG</option>
+                {duplicateTargets.map((tab) => (
+                  <option key={tab.id} value={tab.id}>
+                    Tab {tabs.findIndex((entry) => entry.id === tab.id) + 1}: {tab.fileName}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                disabled={!duplicateTargetId}
+                onClick={duplicateFramesToTarget}
+                style={{
+                  padding: "0.45rem 0.75rem",
+                  borderRadius: 8,
+                  border: "1px solid #d1d5db",
+                  background: !duplicateTargetId ? "#f3f4f6" : "#fff",
+                  cursor: !duplicateTargetId ? "not-allowed" : "pointer",
+                  fontSize: 12,
+                  fontWeight: 600,
+                }}
+              >
+                Duplicate frames to selected PNG
+              </button>
+            </div>
+          ) : null}
           {activeStats ? (
             <label style={{ display: "flex", gap: "0.45rem", alignItems: "center", fontSize: 12, color: "#334155" }}>
               <input type="checkbox" checked={activeTab.reviewConfirmed} onChange={(e) => updateTab(activeTab.id, { reviewConfirmed: e.target.checked })} />

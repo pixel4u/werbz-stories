@@ -90,6 +90,16 @@ function normalizeCards(cards: InternalCard[]): InternalCard[] {
   return sorted.map((card, idx) => ({ ...card, positionIndex: idx }));
 }
 
+function toInternalCards(cards: DetectedCard[] | undefined): InternalCard[] {
+  const seeded = Array.isArray(cards) ? cards : [];
+  return normalizeCards(
+    seeded.map((card) => ({
+      ...card,
+      _id: nextId(),
+    }))
+  );
+}
+
 function toPublicShape(cards: InternalCard[]): DetectedCard[] {
   return cards.map(({ _id: _unusedId, ...card }) => {
     void _unusedId;
@@ -338,7 +348,7 @@ export function CropOverlayEditor({
   modalHeader,
   modalFooter,
 }: CropOverlayEditorProps) {
-  const [cards, setCards] = useState<InternalCard[]>([]);
+  const [cards, setCards] = useState<InternalCard[]>(() => toInternalCards(initialCards));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ranDetection, setRanDetection] = useState(false);
@@ -364,21 +374,6 @@ export function CropOverlayEditor({
   useEffect(() => {
     onChange?.(toPublicShape(cards));
   }, [cards, onChange]);
-
-  useEffect(() => {
-    const seeded = Array.isArray(initialCards) ? initialCards : [];
-    const nextCards = normalizeCards(
-      seeded.map((card) => ({
-        ...card,
-        _id: nextId(),
-      }))
-    );
-    setCards(nextCards);
-    setManualOrderIds(null);
-    setSelectedId(nextCards[0]?._id ?? null);
-    setRanDetection(nextCards.length > 0);
-    setError(null);
-  }, [initialCards, sheetUrl]);
 
   useEffect(() => {
     if (autoOpenOnMount && !didAutoOpenRef.current) {
