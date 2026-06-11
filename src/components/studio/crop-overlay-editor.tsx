@@ -21,6 +21,7 @@ interface CropOverlayEditorProps {
   onChange?: (cards: DetectedCard[]) => void;
   autoOpenOnMount?: boolean;
   hideInlineWorkspace?: boolean;
+  modalHeader?: ReactNode;
   modalFooter?: ReactNode;
 }
 
@@ -334,6 +335,7 @@ export function CropOverlayEditor({
   onChange,
   autoOpenOnMount = false,
   hideInlineWorkspace = false,
+  modalHeader,
   modalFooter,
 }: CropOverlayEditorProps) {
   const [cards, setCards] = useState<InternalCard[]>([]);
@@ -627,7 +629,7 @@ export function CropOverlayEditor({
   ];
 
   return (
-    <div style={{ border: "1px solid #dbe3ef", borderRadius: 10, padding: "0.75rem", background: "#fff" }}>
+    <div style={hideInlineWorkspace ? undefined : { border: "1px solid #dbe3ef", borderRadius: 10, padding: "0.75rem", background: "#fff" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
         <strong style={{ fontSize: 13 }}>Detection Preview</strong>
         <div style={{ display: "flex", gap: "0.45rem" }}>
@@ -791,6 +793,7 @@ export function CropOverlayEditor({
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
               <strong>Full-screen Crop Frame Editor</strong>
               <div style={{ display: "flex", gap: "0.45rem", alignItems: "center" }}>
+                {modalHeader}
                 <button type="button" onClick={runDetection} disabled={busy} style={{ padding: "0.4rem 0.65rem", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
                   {busy ? "Detecting..." : "Run detection"}
                 </button>

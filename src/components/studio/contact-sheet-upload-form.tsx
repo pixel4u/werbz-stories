@@ -22,30 +22,13 @@ interface SheetTab {
   result: UploadResult;
   cards: DetectedCard[];
   reviewConfirmed: boolean;
-  allowMismatchImport: boolean;
 }
-
-type ImportMode = "new" | "replace" | "append";
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
 function nextTabId(): string {
   return `sheet-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function cardsSignature(cards: DetectedCard[]): string {
-  return JSON.stringify(
-    cards.map((c) => ({
-      x: c.box.x,
-      y: c.box.y,
-      w: c.box.width,
-      h: c.box.height,
-      label: c.label,
-      n: c.pageNumber,
-      p: c.positionIndex,
-    }))
-  );
 }
 
 function clamp(n: number, min: number, max: number): number {
@@ -72,11 +55,8 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
   const [dragOver, setDragOver] = useState(false);
   const [tabs, setTabs] = useState<SheetTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [importMode, setImportMode] = useState<ImportMode>("new");
   const [importBusy, setImportBusy] = useState(false);
   const [importError, setImportError] = useState("");
-  const [expectedCount, setExpectedCount] = useState<number>(5);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
@@ -113,7 +93,6 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
       result,
       cards: seededCards,
       reviewConfirmed: false,
-      allowMismatchImport: false,
     } satisfies SheetTab;
   }
 
@@ -154,18 +133,16 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
     setTabs((prev) =>
       prev.map((tab) => {
         if (tab.id !== tabId) return tab;
-        const changed = cardsSignature(tab.cards) !== cardsSignature(nextCards);
         return {
           ...tab,
           cards: nextCards,
-          reviewConfirmed: changed ? false : tab.reviewConfirmed,
-          allowMismatchImport: changed ? false : tab.allowMismatchImport,
+          reviewConfirmed: false,
         };
       })
     );
   }
 
-  function updateTab(tabId: string, patch: Partial<Pick<SheetTab, "reviewConfirmed" | "allowMismatchImport">>) {
+  function updateTab(tabId: string, patch: Partial<Pick<SheetTab, "reviewConfirmed">>) {
     setTabs((prev) => prev.map((tab) => (tab.id === tabId ? { ...tab, ...patch } : tab)));
   }
 
@@ -176,7 +153,7 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
         const coverCount = ordered.filter((c) => c.label === "cover").length;
         const endCount = ordered.filter((c) => c.label === "end").length;
         const pageCount = ordered.filter((c) => c.label === "page").length;
-        const selectedCount = coverCount + pageCount + endCount;
+        const selectedCount = coverCount + endCount + pageCount;
         return {
           tabId: tab.id,
           ordered,
@@ -194,11 +171,9 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
   const endCount = tabStats.reduce((sum, stats) => sum + stats.endCount, 0);
   const pageCount = tabStats.reduce((sum, stats) => sum + stats.pageCount, 0);
   const selectedCount = tabStats.reduce((sum, stats) => sum + stats.selectedCount, 0);
-  const countMismatch = expectedCount > 0 && selectedCount !== expectedCount;
   const importSummary = `Cover + ${pageCount} story page${pageCount === 1 ? "" : "s"} + End`;
   const allReviewed = tabs.length > 0 && tabs.every((tab) => tab.reviewConfirmed);
-  const mismatchAccepted = !countMismatch || tabs.every((tab) => tab.allowMismatchImport);
-  const importDisabled = importBusy || tabs.length === 0 || selectedCount === 0 || !allReviewed || coverCount !== 1 || endCount !== 1 || !mismatchAccepted;
+  const importDisabled = importBusy || tabs.length === 0 || selectedCount === 0 || !allReviewed || coverCount !== 1 || endCount !== 1;
 
   async function importBook() {
     if (tabs.length === 0) return;
@@ -224,7 +199,7 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           sheets,
-          mode: importMode,
+          mode: "new",
         }),
       });
 
@@ -241,75 +216,83 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
     }
   }
 
-  return (
-    <div style={{ border: "1px solid #dbe3ef", borderRadius: 10, padding: "0.75rem", background: "#fff" }}>
-      <strong style={{ fontSize: 13 }}>Import Contact Sheet</strong>
-      <p style={{ margin: "0.35rem 0 0.6rem", fontSize: 12, color: "#64748b" }}>
-        Upload one or many PNG contact sheets. Each file gets its own tab, and one import will combine all reviewed frames into the book.
-      </p>
-
-      <div
-        onDragOver={(event) => {
-          event.preventDefault();
-          setDragOver(true);
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={async (event) => {
-          event.preventDefault();
-          setDragOver(false);
-          if (!event.dataTransfer.files?.length) return;
-          await uploadFiles(event.dataTransfer.files);
-        }}
-        style={{
-          border: dragOver ? "2px solid #2563eb" : "1px dashed #94a3b8",
-          borderRadius: 8,
-          padding: "0.9rem",
-          marginBottom: "0.6rem",
-          background: dragOver ? "#eff6ff" : "#f8fafc",
-          fontSize: 13,
-          color: "#475569",
-          textAlign: "center",
-        }}
-      >
-        Drag and drop one or more contact sheets here
-      </div>
-
-      <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/gif"
-          multiple
-          disabled={busy}
-          onChange={async (event) => {
-            const input = event.currentTarget;
-            const files = event.target.files;
-            if (!files?.length) return;
-            await uploadFiles(files);
-            input.value = "";
+  if (!activeTab || !activeTab.result.imageWidth || !activeTab.result.imageHeight) {
+    return (
+      <div style={{ display: "grid", placeItems: "center", minHeight: 320, padding: "1rem" }}>
+        <div
+          onDragOver={(event) => {
+            event.preventDefault();
+            setDragOver(true);
           }}
-        />
-        {tabs.length > 0 ? (
-          <button
-            type="button"
+          onDragLeave={() => setDragOver(false)}
+          onDrop={async (event) => {
+            event.preventDefault();
+            setDragOver(false);
+            if (!event.dataTransfer.files?.length) return;
+            await uploadFiles(event.dataTransfer.files);
+          }}
+          style={{
+            width: "min(560px, 100%)",
+            border: dragOver ? "2px solid #2563eb" : "1px dashed #94a3b8",
+            borderRadius: 18,
+            padding: "2rem",
+            background: dragOver ? "#eff6ff" : "#f8fafc",
+            textAlign: "center",
+          }}
+        >
+          <div style={{ fontSize: 12, letterSpacing: "0.14em", textTransform: "uppercase", color: "#64748b", fontWeight: 700 }}>Import Contact Sheet</div>
+          <h3 style={{ margin: "0.7rem 0 0.4rem", fontSize: 28, lineHeight: 1.1 }}>Upload one or more PNG sheets</h3>
+          <p style={{ margin: "0 auto 1.1rem", maxWidth: 420, fontSize: 14, color: "#64748b" }}>
+            Each PNG becomes its own tab in the full-screen crop editor. New uploads reuse the last frame layout so every page stays the same size.
+          </p>
+          <div style={{ display: "flex", justifyContent: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => fileInputRef.current?.click()}
+              style={{ padding: "0.85rem 1.1rem", borderRadius: 999, border: "1px solid #2563eb", background: "#2563eb", color: "#fff", cursor: "pointer", fontWeight: 700 }}
+            >
+              {busy ? "Uploading..." : "Choose files"}
+            </button>
+            <span style={{ alignSelf: "center", fontSize: 13, color: "#64748b" }}>or drag files here</span>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            multiple
             disabled={busy}
-            onClick={() => fileInputRef.current?.click()}
-            style={{ padding: "0.5rem 0.8rem", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer", fontWeight: 600 }}
-          >
-            Upload another PNG
-          </button>
-        ) : null}
+            onChange={async (event) => {
+              const input = event.currentTarget;
+              const files = event.target.files;
+              if (!files?.length) return;
+              await uploadFiles(files);
+              input.value = "";
+            }}
+            style={{ display: "none" }}
+          />
+          {error ? <p style={{ margin: "0.9rem 0 0", fontSize: 12, color: "#b91c1c" }}>{error}</p> : null}
+        </div>
       </div>
+    );
+  }
 
-      {busy ? <p style={{ margin: "0.55rem 0 0", fontSize: 12 }}>Uploading...</p> : null}
-      {error ? <p style={{ margin: "0.55rem 0 0", fontSize: 12, color: "#b91c1c" }}>{error}</p> : null}
-
-      {tabs.length > 0 ? (
-        <div style={{ marginTop: "0.8rem", display: "grid", gap: "0.75rem" }}>
-          <div style={{ display: "flex", gap: "0.45rem", overflowX: "auto", paddingBottom: 2 }}>
+  return (
+    <CropOverlayEditor
+      key={activeTab.id}
+      sheetUrl={activeTab.result.sheetUrl}
+      imageWidth={activeTab.result.imageWidth}
+      imageHeight={activeTab.result.imageHeight}
+      initialCards={activeTab.cards}
+      onChange={(nextCards) => updateTabCards(activeTab.id, nextCards)}
+      autoOpenOnMount
+      hideInlineWorkspace
+      modalHeader={
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginRight: "0.5rem" }}>
+          <div style={{ display: "flex", gap: "0.4rem", maxWidth: 560, overflowX: "auto", paddingBottom: 2 }}>
             {tabs.map((tab, index) => {
-              const stats = tabStats.find((entry) => entry.tabId === tab.id);
               const isActive = tab.id === activeTabId;
+              const stats = tabStats.find((entry) => entry.tabId === tab.id);
               return (
                 <button
                   key={tab.id}
@@ -318,9 +301,9 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
                   style={{
                     flex: "0 0 auto",
                     display: "grid",
-                    gap: 3,
-                    minWidth: 164,
-                    padding: "0.65rem 0.8rem",
+                    gap: 2,
+                    minWidth: 140,
+                    padding: "0.45rem 0.6rem",
                     borderRadius: 10,
                     border: isActive ? "1px solid #2563eb" : "1px solid #d1d5db",
                     background: isActive ? "#eff6ff" : "#fff",
@@ -328,168 +311,79 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
                     cursor: "pointer",
                   }}
                 >
-                  <span style={{ fontSize: 11, color: isActive ? "#1d4ed8" : "#64748b", fontWeight: 700 }}>Tab {index + 1}</span>
+                  <span style={{ fontSize: 10, color: isActive ? "#1d4ed8" : "#64748b", fontWeight: 700 }}>Tab {index + 1}</span>
                   <span style={{ fontSize: 12, color: "#0f172a", fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tab.fileName}</span>
-                  <span style={{ fontSize: 11, color: "#64748b" }}>{stats?.selectedCount ?? 0} crops</span>
+                  <span style={{ fontSize: 10, color: "#64748b" }}>{stats?.selectedCount ?? 0} crops</span>
                 </button>
               );
             })}
           </div>
-
-          <div style={{ display: "grid", gap: "0.45rem", padding: "0.7rem", border: "1px solid #e5e7eb", borderRadius: 8, background: "#f8fafc" }}>
-            <label style={{ fontSize: 12, color: "#334155", display: "grid", gap: 4 }}>
-              Expected total page count (Cover + story pages + End)
-              <input
-                type="number"
-                min={3}
-                value={expectedCount}
-                onChange={(e) => setExpectedCount(Number.parseInt(e.target.value || "0", 10) || 0)}
-                style={{ width: 220, padding: "0.4rem", border: "1px solid #d1d5db", borderRadius: 6, background: "#fff" }}
-              />
-            </label>
-            <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", fontSize: 12, color: "#475569" }}>
-              <span>Total uploaded sheets: {tabs.length}</span>
-              <span>Total selected crops: {selectedCount}</span>
-              <span>Cover crops: {coverCount}</span>
-              <span>Story pages: {pageCount}</span>
-              <span>End crops: {endCount}</span>
-            </div>
-            {countMismatch ? (
-              <p style={{ margin: 0, fontSize: 12, color: "#b91c1c", fontWeight: 700 }}>
-                Expected {expectedCount} pages, but {selectedCount} crop boxes are selected across all tabs.
-              </p>
-            ) : null}
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => fileInputRef.current?.click()}
+            style={{ padding: "0.45rem 0.75rem", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 600 }}
+          >
+            {busy ? "Uploading..." : "Upload another PNG"}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            multiple
+            disabled={busy}
+            onChange={async (event) => {
+              const input = event.currentTarget;
+              const files = event.target.files;
+              if (!files?.length) return;
+              await uploadFiles(files);
+              input.value = "";
+            }}
+            style={{ display: "none" }}
+          />
+        </div>
+      }
+      modalFooter={
+        <div style={{ display: "grid", gap: "0.55rem" }}>
+          <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", fontSize: 12, color: "#475569" }}>
+            <span>Total sheets: {tabs.length}</span>
+            <span>Total crops: {selectedCount}</span>
+            <span>Cover crops: {coverCount}</span>
+            <span>Story pages: {pageCount}</span>
+            <span>End crops: {endCount}</span>
           </div>
-
-          {activeTab && activeStats && activeTab.result.imageWidth && activeTab.result.imageHeight ? (
-            <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "0.7rem" }}>
-              <p style={{ margin: 0, fontSize: 12, color: "#065f46", fontWeight: 700 }}>Active sheet ready.</p>
-              <p style={{ margin: "0.3rem 0 0", fontSize: 12, color: "#475569" }}>
-                Asset: <code>{activeTab.result.sheetAssetId}</code>
-              </p>
-              <p style={{ margin: "0.25rem 0 0.7rem", fontSize: 12, color: "#475569" }}>
-                Size: {activeTab.result.imageWidth} × {activeTab.result.imageHeight}
-              </p>
-
-              <CropOverlayEditor
-                key={activeTab.id}
-                sheetUrl={activeTab.result.sheetUrl}
-                imageWidth={activeTab.result.imageWidth}
-                imageHeight={activeTab.result.imageHeight}
-                initialCards={activeTab.cards}
-                onChange={(nextCards) => updateTabCards(activeTab.id, nextCards)}
-                autoOpenOnMount
-                hideInlineWorkspace
-                modalFooter={
-                  <div style={{ display: "grid", gap: "0.45rem" }}>
-                    <p style={{ margin: 0, fontSize: 12, color: "#475569" }}>
-                      <strong>{activeTab.fileName}</strong> has {activeTab.cards.length} crop box{activeTab.cards.length === 1 ? "" : "es"}.
-                    </p>
-                    <p style={{ margin: 0, fontSize: 12, color: "#334155" }}>
-                      Import result preview: <strong>{importSummary}</strong>
-                    </p>
-                    <p style={{ margin: 0, fontSize: 12, color: "#64748b" }}>
-                      New uploads inherit the previous sheet’s crop boxes so you can keep a consistent frame size.
-                    </p>
-                    <label style={{ display: "flex", gap: "0.45rem", alignItems: "center", fontSize: 12, color: "#334155" }}>
-                      <input type="checkbox" checked={activeTab.reviewConfirmed} onChange={(e) => updateTab(activeTab.id, { reviewConfirmed: e.target.checked })} />
-                      I reviewed this tab’s crop boxes and roles.
-                    </label>
-                    {countMismatch ? (
-                      <label style={{ display: "flex", gap: "0.45rem", alignItems: "center", fontSize: 12, color: "#92400e" }}>
-                        <input type="checkbox" checked={activeTab.allowMismatchImport} onChange={(e) => updateTab(activeTab.id, { allowMismatchImport: e.target.checked })} />
-                        Allow mismatch import for this tab while total selection is {selectedCount} vs expected {expectedCount}.
-                      </label>
-                    ) : null}
-                    <button
-                      type="button"
-                      disabled={!allReviewed || coverCount !== 1 || endCount !== 1 || (countMismatch && !mismatchAccepted)}
-                      onClick={() => {
-                        setShowConfirm(true);
-                        setImportError("");
-                      }}
-                      style={{
-                        padding: "0.6rem 0.8rem",
-                        borderRadius: 8,
-                        border: "1px solid #2563eb",
-                        background: !allReviewed || coverCount !== 1 || endCount !== 1 || (countMismatch && !mismatchAccepted) ? "#93c5fd" : "#2563eb",
-                        color: "#fff",
-                        cursor: !allReviewed || coverCount !== 1 || endCount !== 1 || (countMismatch && !mismatchAccepted) ? "not-allowed" : "pointer",
-                        fontWeight: 700,
-                      }}
-                    >
-                      Import Book
-                    </button>
-                  </div>
-                }
-              />
-            </div>
+          <p style={{ margin: 0, fontSize: 12, color: "#334155" }}>
+            Import result preview: <strong>{importSummary}</strong>
+          </p>
+          <p style={{ margin: 0, fontSize: 12, color: "#64748b" }}>
+            Run detection and edit boxes here in full screen. New uploads inherit the previous sheet’s frame layout.
+          </p>
+          {error ? <p style={{ margin: 0, fontSize: 12, color: "#b91c1c" }}>{error}</p> : null}
+          {importError ? <p style={{ margin: 0, fontSize: 12, color: "#b91c1c" }}>{importError}</p> : null}
+          {activeStats ? (
+            <label style={{ display: "flex", gap: "0.45rem", alignItems: "center", fontSize: 12, color: "#334155" }}>
+              <input type="checkbox" checked={activeTab.reviewConfirmed} onChange={(e) => updateTab(activeTab.id, { reviewConfirmed: e.target.checked })} />
+              I reviewed the active tab’s crop boxes and roles.
+            </label>
           ) : null}
+          <button
+            type="button"
+            disabled={importDisabled}
+            onClick={importBook}
+            style={{
+              padding: "0.7rem 0.9rem",
+              borderRadius: 8,
+              border: "1px solid #2563eb",
+              background: importDisabled ? "#93c5fd" : "#2563eb",
+              color: "#fff",
+              cursor: importDisabled ? "not-allowed" : "pointer",
+              fontWeight: 700,
+            }}
+          >
+            {importBusy ? "Importing..." : "Import Book"}
+          </button>
         </div>
-      ) : null}
-
-      {showConfirm && tabs.length > 0 ? (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.46)", zIndex: 200, display: "grid", placeItems: "center", padding: "1.2rem" }}>
-          <div style={{ width: "min(560px, 100%)", background: "#fff", borderRadius: 14, boxShadow: "0 20px 60px rgba(15,23,42,.28)", padding: "1rem" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.8rem" }}>
-              <h2 style={{ margin: 0, fontSize: 18 }}>Confirm Import</h2>
-              <button type="button" onClick={() => setShowConfirm(false)} style={{ padding: "0.45rem 0.75rem", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer" }}>
-                Close
-              </button>
-            </div>
-
-            <div style={{ display: "grid", gap: "0.4rem", fontSize: 13, color: "#334155" }}>
-              <div>Total sheets: {tabs.length}</div>
-              <div>Total crops: {selectedCount}</div>
-              <div>Cover crops: {coverCount}</div>
-              <div>Story pages: {pageCount}</div>
-              <div>End crops: {endCount}</div>
-              <div>Expected count: {expectedCount}</div>
-              <div>Result preview: {importSummary}</div>
-            </div>
-
-            <div style={{ marginTop: "0.8rem", maxHeight: 180, overflow: "auto", border: "1px solid #e5e7eb", borderRadius: 8, padding: "0.6rem", background: "#f8fafc" }}>
-              {tabs.map((tab, index) => {
-                const stats = tabStats.find((entry) => entry.tabId === tab.id);
-                return (
-                  <div key={tab.id} style={{ fontSize: 12, color: "#475569", display: "flex", justifyContent: "space-between", gap: "1rem", padding: "0.2rem 0" }}>
-                    <span>
-                      {index + 1}. {tab.fileName}
-                    </span>
-                    <span>{stats?.selectedCount ?? 0} crops</span>
-                  </div>
-                );
-              })}
-            </div>
-
-            <label style={{ display: "grid", gap: "0.35rem", marginTop: "0.8rem", fontSize: 13 }}>
-              Import mode
-              <select value={importMode} onChange={(e) => setImportMode(e.target.value as ImportMode)} style={{ padding: "0.55rem", borderRadius: 8, border: "1px solid #d1d5db" }}>
-                <option value="new">New book (recommended)</option>
-                <option value="replace">Replace current book (disabled in this step)</option>
-                <option value="append">Append to current book (disabled in this step)</option>
-              </select>
-            </label>
-
-            <p style={{ margin: "0.6rem 0 0", fontSize: 12, color: "#64748b" }}>Import only runs after explicit confirmation. No auto-publish.</p>
-            {importError ? <p style={{ margin: "0.55rem 0 0", fontSize: 12, color: "#b91c1c" }}>{importError}</p> : null}
-
-            <div style={{ marginTop: "0.85rem", display: "flex", gap: "0.55rem", justifyContent: "flex-end" }}>
-              <button type="button" onClick={() => setShowConfirm(false)} style={{ padding: "0.55rem 0.8rem", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer" }}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={importBook}
-                disabled={importDisabled}
-                style={{ padding: "0.6rem 0.85rem", borderRadius: 8, border: "1px solid #2563eb", background: "#2563eb", color: "#fff", cursor: "pointer", fontWeight: 700 }}
-              >
-                {importBusy ? "Importing..." : "Import Book"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </div>
+      }
+    />
   );
 }
