@@ -62,6 +62,43 @@
     z-index:10;
   }
   .title-tag.show{opacity:1}
+  .reader-actions{
+    position:fixed;
+    top:max(16px, env(safe-area-inset-top));
+    right:max(16px, env(safe-area-inset-right));
+    z-index:14;
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .home-cta{
+    display:inline-flex;
+    align-items:center;
+    gap:10px;
+    padding:12px 16px;
+    border-radius:999px;
+    text-decoration:none;
+    color:#f7efdd;
+    border:1px solid rgba(255,255,255,.18);
+    background:rgba(14,17,22,.72);
+    backdrop-filter:blur(12px);
+    box-shadow:0 16px 36px rgba(0,0,0,.32);
+    font-size:12px;
+    font-weight:700;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    transition:background .22s ease, transform .22s ease, box-shadow .22s ease;
+  }
+  .home-cta:hover{
+    background:rgba(255,255,255,.14);
+    transform:translateY(-1px);
+  }
+  .home-cta svg{
+    width:15px;
+    height:15px;
+    fill:currentColor;
+    opacity:.95;
+  }
   .hint{
     position:fixed;
     left:50%;
@@ -127,23 +164,35 @@
     transform:translateY(-1px);
   }
   button.nav{
-    width:46px;
-    height:46px;
+    width:54px;
+    height:54px;
     border-radius:50%;
-    border:1px solid rgba(255,255,255,.16);
-    background:rgba(255,255,255,.06);
-    color:#f4ead9;
+    border:1px solid rgba(241,220,162,.36);
+    background:rgba(10,14,18,.82);
+    color:#fff4db;
     cursor:pointer;
     display:grid;
     place-items:center;
-    backdrop-filter:blur(8px);
+    backdrop-filter:blur(10px);
+    box-shadow:0 12px 28px rgba(0,0,0,.32), inset 0 1px 0 rgba(255,255,255,.08);
     transition:.2s ease;
   }
-  button.nav:hover{background:rgba(255,255,255,.14);transform:translateY(-1px)}
-  button.nav:disabled{opacity:.28;cursor:default;transform:none}
+  button.nav:hover{
+    background:rgba(29,35,42,.94);
+    transform:translateY(-1px);
+    box-shadow:0 16px 34px rgba(0,0,0,.36), inset 0 1px 0 rgba(255,255,255,.10);
+  }
+  button.nav:disabled{
+    opacity:.42;
+    color:rgba(255,244,219,.62);
+    background:rgba(10,14,18,.62);
+    cursor:default;
+    transform:none;
+  }
   button.nav svg{
-    width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;
-    stroke-linecap:round;stroke-linejoin:round;
+    width:22px;
+    height:22px;
+    fill:currentColor;
   }
   .dots{display:flex;align-items:center;gap:8px}
   .dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.23);transition:.25s ease}
@@ -169,8 +218,8 @@
       gap:14px;
     }
     button.nav{
-      width:42px;
-      height:42px;
+      width:48px;
+      height:48px;
     }
     .hint{
       bottom:72px;
@@ -178,10 +227,20 @@
       letter-spacing:.18em;
     }
     .title-tag{
-      top:14px;
+      top:76px;
       max-width:80vw;
       text-align:center;
       font-size:12px;
+    }
+    .reader-actions{
+      left:max(12px, env(safe-area-inset-left));
+      right:max(12px, env(safe-area-inset-right));
+      justify-content:flex-end;
+    }
+    .home-cta{
+      padding:11px 14px;
+      font-size:11px;
+      letter-spacing:.10em;
     }
   }
 
@@ -193,7 +252,7 @@
       display:none;
     }
     .title-tag{
-      top:10px;
+      top:68px;
       font-size:12px;
     }
   }
@@ -202,6 +261,12 @@
 <body>
 <div id="app"></div>
 
+<div class="reader-actions">
+  <a class="home-cta" href="/" aria-label="Go back to main site">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.2 3 10.6v10.2c0 .44.36.8.8.8h5.8v-6.6c0-.44.36-.8.8-.8h3.2c.44 0 .8.36.8.8v6.6h5.8c.44 0 .8-.36.8-.8V10.6L12 3.2Z"/></svg>
+    Main Site
+  </a>
+</div>
 <div class="title-tag" id="titleTag">The Lantern of the Quiet Wood</div>
 <div class="hint" id="hint">Drag the page edge or use arrows</div>
 <div class="end-cta" id="endCta">
@@ -210,11 +275,11 @@
 
 <div class="ui">
   <button class="nav" id="prevBtn" aria-label="Previous page">
-    <svg viewBox="0 0 24 24"><polyline points="15 5 8 12 15 19"/></svg>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.8 4.8 7.6 12l8.2 7.2V4.8Z"/></svg>
   </button>
   <div class="dots" id="dots"></div>
   <button class="nav" id="nextBtn" aria-label="Next page">
-    <svg viewBox="0 0 24 24"><polyline points="9 5 16 12 9 19"/></svg>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 4.8 16.4 12l-8.2 7.2V4.8Z"/></svg>
   </button>
 </div>
 
@@ -722,6 +787,61 @@ function fitImage(ctx,w,h,image,fit){
   ctx.drawImage(image, (w - dw) / 2, (h - dh) / 2, dw, dh);
 }
 
+function drawMediaFallback(ctx,w,h,kind,caption){
+  drawPaper(ctx,w,h,"front");
+
+  const glow = ctx.createRadialGradient(w * 0.5, h * 0.34, 30, w * 0.5, h * 0.34, w * 0.45);
+  glow.addColorStop(0, "rgba(255,255,255,.34)");
+  glow.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(0,0,w,h);
+
+  ctx.fillStyle = "rgba(83,62,37,.14)";
+  roundedRect(ctx, 92, 92, w - 184, h - 224, 28);
+  ctx.fill();
+
+  ctx.strokeStyle = "rgba(120,92,52,.16)";
+  ctx.lineWidth = 4;
+  roundedRect(ctx, 92, 92, w - 184, h - 224, 28);
+  ctx.stroke();
+
+  ctx.save();
+  ctx.translate(w / 2, h * 0.38);
+  ctx.strokeStyle = "rgba(140,108,63,.82)";
+  ctx.lineWidth = 14;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(-82, 44);
+  ctx.lineTo(0, -24);
+  ctx.lineTo(82, 44);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-82, 44);
+  ctx.lineTo(-82, 108);
+  ctx.lineTo(82, 108);
+  ctx.lineTo(82, 44);
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.fillStyle = "#7e6646";
+  ctx.textAlign = "center";
+  ctx.font = "700 28px system-ui, sans-serif";
+  ctx.fillText("Artwork is on the way", w / 2, h * 0.68);
+  ctx.fillStyle = "#9b8465";
+  ctx.font = "500 20px system-ui, sans-serif";
+  const label = kind === "image" ? "Image" : kind === "video" ? "Video poster" : "Interactive poster";
+  wrapLines(ctx, `${label} is still loading or has not been uploaded yet.`, w / 2, h * 0.74, w - 240, 30, true);
+
+  if (caption) {
+    ctx.fillStyle = "rgba(0,0,0,.58)";
+    roundedRect(ctx, 56, h - 132, w - 112, 68, 14);
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.font = "500 28px system-ui, sans-serif";
+    ctx.fillText(caption, w / 2, h - 88);
+  }
+}
+
 function drawBackendMediaPage(ctx,w,h,content,kind,image){
   const assetHint =
     kind === "image" ? (content.assetId || content.src || "missing-asset-id")
@@ -731,16 +851,10 @@ function drawBackendMediaPage(ctx,w,h,content,kind,image){
     drawPaper(ctx,w,h,"front");
     fitImage(ctx,w,h,image,content.fit || "cover");
   } else {
-    drawPaper(ctx,w,h,"front");
-    ctx.fillStyle = "#ececec";
-    roundedRect(ctx, 52, 56, w - 104, h - 164, 20);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(80,80,80,.22)";
-    ctx.lineWidth = 3;
-    ctx.stroke();
+    drawMediaFallback(ctx,w,h,kind,content.caption);
   }
 
-  if (!image || debug) {
+  if (debug) {
     ctx.fillStyle = image ? "rgba(15,15,15,.75)" : "#2f2f2f";
     ctx.font = "700 44px Georgia, serif";
     ctx.textAlign = "left";
@@ -749,7 +863,7 @@ function drawBackendMediaPage(ctx,w,h,content,kind,image){
     wrapLines(ctx, `asset: ${assetHint}`, 84, 182, w - 168, 34, false);
   }
 
-  if (content.caption) {
+  if (image && content.caption) {
     ctx.fillStyle = "rgba(0,0,0,.62)";
     roundedRect(ctx, 56, h - 132, w - 112, 68, 14);
     ctx.fill();
@@ -1400,6 +1514,19 @@ function updateLeafFX(leaf, progress, activeCurl, curl, lift){
     shadow.beginFill(0x000000, 0.018 + elevation * 0.024);
     shadow.drawRoundedRect(-36, -PAGE_H * 0.47, 72, PAGE_H * 0.94, 28);
     shadow.endFill();
+
+    if(leaf.isBackCover){
+      // The closing/opening back cover needed extra grounding during reverse
+      // flips, otherwise the shadow behind it nearly disappeared.
+      shadow.beginFill(0x000000, 0.042 + elevation * 0.056);
+      shadow.drawEllipse(
+        centerX * 1.02,
+        centerY + 14,
+        PAGE_W * (0.30 + spreadness * 0.30),
+        PAGE_H * (0.16 + spreadness * 0.05)
+      );
+      shadow.endFill();
+    }
 
     shadow.filters = [new PIXI.BlurFilter(34 + elevation * 40 + phase * 24, 7)];
   }else{

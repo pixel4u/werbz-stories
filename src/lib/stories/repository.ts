@@ -267,6 +267,7 @@ export async function listPublishedStorybooks(): Promise<StorybookListItemType[]
         status: row.status,
         updatedAt: toIsoString(row.updatedAt),
         pageAspectRatio: await deriveListItemAspectRatio({ theme: row.theme, coverAssetId: row.coverAssetId }),
+        direction: (row.theme as Record<string, unknown> | null)?.direction === "rtl" ? "rtl" : "ltr",
       })
     )
   );

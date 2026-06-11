@@ -48,21 +48,44 @@ function BookCover({
   );
 }
 
-export default async function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ lang?: string }>;
+}) {
   const items = await listPublishedStorybooks();
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const activeLang = resolvedSearchParams?.lang === "hebrew" || resolvedSearchParams?.lang === "english" ? resolvedSearchParams.lang : null;
+  const filteredItems =
+    activeLang === "hebrew"
+      ? items.filter((item) => item.direction === "rtl")
+      : activeLang === "english"
+        ? items.filter((item) => item.direction !== "rtl")
+        : items;
 
   return (
     <main className="library">
       <header className="library-head">
         <h1>Stories</h1>
         <p>A little shelf of storybooks from Werbz.</p>
+        <div className="language-toggle" role="group" aria-label="Filter stories by language">
+          <Link href={activeLang === "english" ? "/" : "/?lang=english"} className={`language-chip${activeLang === "english" ? " active" : ""}`}>
+            English
+          </Link>
+          <Link href={activeLang === "hebrew" ? "/" : "/?lang=hebrew"} className={`language-chip${activeLang === "hebrew" ? " active" : ""}`}>
+            Hebrew
+          </Link>
+        </div>
+        <p className="language-note">Hebrew books are detected automatically from right-to-left reading direction.</p>
       </header>
 
       {items.length === 0 ? (
         <p className="library-empty">No published stories yet.</p>
+      ) : filteredItems.length === 0 ? (
+        <p className="library-empty">No {activeLang === "hebrew" ? "Hebrew" : "English"} stories yet.</p>
       ) : (
         <div className="shelf">
-          {items.map((item) => (
+          {filteredItems.map((item) => (
             <BookCover key={item.id} slug={item.slug} title={item.title} coverAssetId={item.coverAssetId} aspectRatio={item.pageAspectRatio} />
           ))}
         </div>
@@ -82,6 +105,44 @@ export default async function HomePage() {
         .library-head { text-align: center; margin-bottom: 3rem; }
         .library-head h1 { margin: 0 0 0.5rem; font-size: 2.4rem; letter-spacing: 0.01em; }
         .library-head p { margin: 0; color: #b6aaa0; font-family: system-ui, sans-serif; font-size: 0.95rem; }
+        .language-toggle {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.75rem;
+          margin-top: 1.35rem;
+          padding: 0.45rem;
+          border-radius: 999px;
+          background: rgba(255,255,255,0.06);
+          border: 1px solid rgba(255,255,255,0.08);
+          box-shadow: 0 18px 38px rgba(0,0,0,.18);
+        }
+        .language-chip {
+          min-width: 124px;
+          padding: 0.85rem 1.25rem;
+          border-radius: 999px;
+          text-decoration: none;
+          color: #eaddca;
+          font-family: system-ui, sans-serif;
+          font-size: 0.92rem;
+          font-weight: 700;
+          letter-spacing: 0.02em;
+          background: transparent;
+          transition: background .22s ease, color .22s ease, transform .22s ease, box-shadow .22s ease;
+        }
+        .language-chip:hover {
+          background: rgba(255,255,255,0.09);
+          transform: translateY(-1px);
+        }
+        .language-chip.active {
+          color: #1d1713;
+          background: linear-gradient(180deg, #f2dfb2 0%, #d7b978 100%);
+          box-shadow: 0 10px 24px rgba(0,0,0,.22);
+        }
+        .language-note {
+          margin-top: 0.85rem !important;
+          color: #9f948a !important;
+          font-size: 0.86rem !important;
+        }
         .library-empty { text-align: center; color: #b6aaa0; font-family: system-ui, sans-serif; }
 
         .shelf {
@@ -170,6 +231,18 @@ export default async function HomePage() {
           text-align: center;
           font-size: 1.05rem;
           color: #efe7d8;
+        }
+
+        @media (max-width: 640px) {
+          .language-toggle {
+            gap: 0.5rem;
+            padding: 0.35rem;
+          }
+          .language-chip {
+            min-width: 0;
+            padding: 0.8rem 1rem;
+            font-size: 0.88rem;
+          }
         }
       `}</style>
     </main>

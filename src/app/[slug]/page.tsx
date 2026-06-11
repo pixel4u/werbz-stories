@@ -35,5 +35,5 @@ export default async function StoryPage({ params }: StoryPageProps) {
     }
   }
 
-  return <BookViewer slug={slug} />;
+  return <BookViewer slug={slug} title={storybook.title} />;
 }
