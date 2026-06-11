@@ -17,6 +17,7 @@ interface CropOverlayEditorProps {
   sheetUrl: string;
   imageWidth: number;
   imageHeight: number;
+  initialCards?: DetectedCard[];
   onChange?: (cards: DetectedCard[]) => void;
   autoOpenOnMount?: boolean;
   hideInlineWorkspace?: boolean;
@@ -329,6 +330,7 @@ export function CropOverlayEditor({
   sheetUrl,
   imageWidth,
   imageHeight,
+  initialCards,
   onChange,
   autoOpenOnMount = false,
   hideInlineWorkspace = false,
@@ -360,6 +362,21 @@ export function CropOverlayEditor({
   useEffect(() => {
     onChange?.(toPublicShape(cards));
   }, [cards, onChange]);
+
+  useEffect(() => {
+    const seeded = Array.isArray(initialCards) ? initialCards : [];
+    const nextCards = normalizeCards(
+      seeded.map((card) => ({
+        ...card,
+        _id: nextId(),
+      }))
+    );
+    setCards(nextCards);
+    setManualOrderIds(null);
+    setSelectedId(nextCards[0]?._id ?? null);
+    setRanDetection(nextCards.length > 0);
+    setError(null);
+  }, [initialCards, sheetUrl]);
 
   useEffect(() => {
     if (autoOpenOnMount && !didAutoOpenRef.current) {

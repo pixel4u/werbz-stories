@@ -23,7 +23,13 @@ interface ImportCardInput {
   role: CardRole;
 }
 
+interface ImportSheetInput {
+  sheetAssetId: string;
+  cards: ImportCardInput[];
+}
+
 interface ImportPayload {
+  sheets?: ImportSheetInput[];
   sheetAssetId: string;
   cards: ImportCardInput[];
   mode?: ImportMode;
@@ -45,32 +51,64 @@ function sanitizeSlugPart(input: string): string {
 function parseBody(value: unknown): ImportPayload {
   if (!value || typeof value !== "object") throw new Error("Invalid request body");
   const raw = value as Partial<ImportPayload>;
-  const sheetAssetId = String(raw.sheetAssetId ?? "").trim();
-  if (!sheetAssetId) throw new Error("sheetAssetId is required");
-  if (!Array.isArray(raw.cards) || raw.cards.length === 0) throw new Error("cards are required");
-  if (raw.cards.length > MAX_IMPORT_CARDS) throw new Error("Too many cards");
+  function parseCards(input: unknown, prefix: string): ImportCardInput[] {
+    if (!Array.isArray(input) || input.length === 0) throw new Error(`${prefix} cards are required`);
+    if (input.length > MAX_IMPORT_CARDS) throw new Error(`Too many cards in ${prefix}`);
+    return input.map((card, idx) => {
+      if (!card || typeof card !== "object") throw new Error(`Invalid card at ${prefix} index ${idx}`);
+      const c = card as Partial<ImportCardInput>;
+      const role = c.role;
+      if (role !== "cover" && role !== "page" && role !== "end") throw new Error(`Invalid role at ${prefix} card ${idx}`);
+      const orderRaw = c.order ?? idx;
+      const order = Number.isFinite(Number(orderRaw)) ? Number(orderRaw) : idx;
+      const box = c.box;
+      if (!box || typeof box !== "object") throw new Error(`Invalid box at ${prefix} card ${idx}`);
+      const boxObj = box as Record<string, unknown>;
+      const x = Math.round(Number(boxObj.x));
+      const y = Math.round(Number(boxObj.y));
+      const width = Math.round(Number(boxObj.width));
+      const height = Math.round(Number(boxObj.height));
+      if (![x, y, width, height].every(Number.isFinite)) throw new Error(`Invalid box numbers at ${prefix} card ${idx}`);
+      return { box: { x, y, width, height }, order, role };
+    });
+  }
 
-  const cards: ImportCardInput[] = raw.cards.map((card, idx) => {
-    if (!card || typeof card !== "object") throw new Error(`Invalid card at index ${idx}`);
-    const c = card as Partial<ImportCardInput>;
-    const role = c.role;
-    if (role !== "cover" && role !== "page" && role !== "end") throw new Error(`Invalid role at card ${idx}`);
-    const orderRaw = c.order ?? idx;
-    const order = Number.isFinite(Number(orderRaw)) ? Number(orderRaw) : idx;
-    const box = c.box;
-    if (!box || typeof box !== "object") throw new Error(`Invalid box at card ${idx}`);
-    const boxObj = box as Record<string, unknown>;
-    const x = Math.round(Number(boxObj.x));
-    const y = Math.round(Number(boxObj.y));
-    const width = Math.round(Number(boxObj.width));
-    const height = Math.round(Number(boxObj.height));
-    if (![x, y, width, height].every(Number.isFinite)) throw new Error(`Invalid box numbers at card ${idx}`);
-    return { box: { x, y, width, height }, order, role };
-  });
+  const sheetsRaw = Array.isArray(raw.sheets) ? raw.sheets : null;
+  const sheets: ImportSheetInput[] =
+    sheetsRaw && sheetsRaw.length > 0
+      ? sheetsRaw.map((sheet, idx) => {
+          if (!sheet || typeof sheet !== "object") throw new Error(`Invalid sheet at index ${idx}`);
+          const candidate = sheet as Partial<ImportSheetInput>;
+          const sheetAssetId = String(candidate.sheetAssetId ?? "").trim();
+          if (!sheetAssetId) throw new Error(`sheetAssetId is required for sheet ${idx + 1}`);
+          return {
+            sheetAssetId,
+            cards: parseCards(candidate.cards, `sheet ${idx + 1}`),
+          };
+        })
+      : (() => {
+          const sheetAssetId = String(raw.sheetAssetId ?? "").trim();
+          if (!sheetAssetId) throw new Error("sheetAssetId is required");
+          return [
+            {
+              sheetAssetId,
+              cards: parseCards(raw.cards, "request"),
+            },
+          ];
+        })();
+
+  const totalCards = sheets.reduce((sum, sheet) => sum + sheet.cards.length, 0);
+  if (totalCards > MAX_IMPORT_CARDS) throw new Error("Too many cards");
 
   const mode: ImportMode = raw.mode === "replace" || raw.mode === "append" ? raw.mode : "new";
   const targetStorybookId = raw.targetStorybookId ? String(raw.targetStorybookId).trim() : undefined;
-  return { sheetAssetId, cards, mode, targetStorybookId };
+  return {
+    sheetAssetId: sheets[0]?.sheetAssetId ?? "",
+    cards: sheets[0]?.cards ?? [],
+    sheets,
+    mode,
+    targetStorybookId,
+  };
 }
 
 function validateBoxesWithinBounds(cards: ImportCardInput[], width: number, height: number): void {
@@ -108,31 +146,46 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     }
 
     const db = getDb();
-    const sheetRows = await db.select().from(assets).where(eq(assets.id, payload.sheetAssetId)).limit(1);
-    const sheet = sheetRows[0];
-    if (!sheet) {
-      return NextResponse.json({ error: "Sheet asset not found" }, { status: 404 });
+    const sheetInputs = payload.sheets && payload.sheets.length > 0 ? payload.sheets : [{ sheetAssetId: payload.sheetAssetId, cards: payload.cards }];
+    const preparedSheets: Array<{
+      sheetAssetId: string;
+      sheetBuffer: Buffer;
+      sortedCards: ImportCardInput[];
+    }> = [];
+
+    for (const input of sheetInputs) {
+      const sheetRows = await db.select().from(assets).where(eq(assets.id, input.sheetAssetId)).limit(1);
+      const sheet = sheetRows[0];
+      if (!sheet) {
+        return NextResponse.json({ error: `Sheet asset not found: ${input.sheetAssetId}` }, { status: 404 });
+      }
+
+      if (!ALLOWED_IMAGE_MIME_TYPES.has(sheet.mimeType)) {
+        return NextResponse.json({ error: `Sheet asset is not a supported image: ${input.sheetAssetId}` }, { status: 400 });
+      }
+
+      const sheetPath = join(uploadsDir(), sheet.storageKey);
+      const sheetBuffer = await readFile(sheetPath);
+      const sheetMeta = await sharp(sheetBuffer).metadata();
+      const sheetWidth = sheetMeta.width ?? null;
+      const sheetHeight = sheetMeta.height ?? null;
+      if (!sheetWidth || !sheetHeight) {
+        return NextResponse.json({ error: `Could not read source image dimensions for ${input.sheetAssetId}` }, { status: 400 });
+      }
+
+      const sortedCards = sortImportCards(input.cards);
+      validateBoxesWithinBounds(sortedCards, sheetWidth, sheetHeight);
+      preparedSheets.push({
+        sheetAssetId: input.sheetAssetId,
+        sheetBuffer,
+        sortedCards,
+      });
     }
 
-    if (!ALLOWED_IMAGE_MIME_TYPES.has(sheet.mimeType)) {
-      return NextResponse.json({ error: "Sheet asset is not a supported image" }, { status: 400 });
-    }
-
-    const sheetPath = join(uploadsDir(), sheet.storageKey);
-    const sheetBuffer = await readFile(sheetPath);
-    const sheetMeta = await sharp(sheetBuffer).metadata();
-    const sheetWidth = sheetMeta.width ?? null;
-    const sheetHeight = sheetMeta.height ?? null;
-    if (!sheetWidth || !sheetHeight) {
-      return NextResponse.json({ error: "Could not read source image dimensions" }, { status: 400 });
-    }
-
-    const sortedCards = sortImportCards(payload.cards);
-    validateBoxesWithinBounds(sortedCards, sheetWidth, sheetHeight);
-
-    const coverCards = sortedCards.filter((c) => c.role === "cover");
-    const endCards = sortedCards.filter((c) => c.role === "end");
-    const pageCards = sortedCards.filter((c) => c.role === "page");
+    const allCards = preparedSheets.flatMap((sheet) => sheet.sortedCards);
+    const coverCards = allCards.filter((c) => c.role === "cover");
+    const endCards = allCards.filter((c) => c.role === "end");
+    const pageCards = allCards.filter((c) => c.role === "page");
 
     if (coverCards.length !== 1) {
       return NextResponse.json({ error: `Import requires exactly 1 cover card, found ${coverCards.length}` }, { status: 400 });
@@ -141,16 +194,19 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       return NextResponse.json({ error: `Import requires exactly 1 end card, found ${endCards.length}` }, { status: 400 });
     }
 
-    const importPlan = [coverCards[0], ...pageCards, endCards[endCards.length - 1]];
+    const importPlan = preparedSheets.flatMap((sheet) => sheet.sortedCards).filter((c) => c.role === "cover" || c.role === "page" || c.role === "end");
     if (importPlan.length < 2) {
       return NextResponse.json({ error: "Import needs at least cover and end cards" }, { status: 400 });
     }
 
     const croppedAssets: Array<{ role: CardRole; assetId: string; order: number; width: number | null; height: number | null }> = [];
 
-    for (let i = 0; i < importPlan.length; i++) {
-      const card = importPlan[i];
-      const { data: extracted, info } = await sharp(sheetBuffer)
+    for (let i = 0; i < preparedSheets.length; i++) {
+      const preparedSheet = preparedSheets[i];
+      for (let j = 0; j < preparedSheet.sortedCards.length; j++) {
+        const card = preparedSheet.sortedCards[j];
+        const outputIndex = croppedAssets.length;
+        const { data: extracted, info } = await sharp(preparedSheet.sheetBuffer)
         .extract({
           left: card.box.x,
           top: card.box.y,
@@ -161,21 +217,22 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         .png()
         .toBuffer({ resolveWithObject: true });
 
-      const saved = await saveAssetFromBuffer({
-        buffer: extracted,
-        originalName: `contact-sheet-crop-${i + 1}.png`,
-        mimeType: "image/png",
-        width: typeof info.width === "number" ? info.width : undefined,
-        height: typeof info.height === "number" ? info.height : undefined,
-      });
+        const saved = await saveAssetFromBuffer({
+          buffer: extracted,
+          originalName: `contact-sheet-crop-${outputIndex + 1}.png`,
+          mimeType: "image/png",
+          width: typeof info.width === "number" ? info.width : undefined,
+          height: typeof info.height === "number" ? info.height : undefined,
+        });
 
-      croppedAssets.push({
-        role: card.role,
-        assetId: saved.assetId,
-        order: i,
-        width: typeof info.width === "number" ? info.width : null,
-        height: typeof info.height === "number" ? info.height : null,
-      });
+        croppedAssets.push({
+          role: card.role,
+          assetId: saved.assetId,
+          order: outputIndex,
+          width: typeof info.width === "number" ? info.width : null,
+          height: typeof info.height === "number" ? info.height : null,
+        });
+      }
     }
 
     const coverCrop = croppedAssets.find((c) => c.role === "cover") ?? croppedAssets[0] ?? null;
