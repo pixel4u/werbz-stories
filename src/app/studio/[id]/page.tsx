@@ -14,7 +14,7 @@ import {
   setStorybookStatus,
   type StudioPageRow,
   updatePage,
-  updateStorybookMeta,
+  updateStorybookDirection,
 } from "@/lib/studio-service";
 import type { PageContent } from "@/lib/stories/schema";
 import { DeletePageForm } from "@/components/studio/delete-page-form";
@@ -426,27 +426,6 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
     redirect(`/studio/${storybookId}${nextStatus === "published" ? "?published=1" : ""}`);
   }
 
-  async function updateBookDirectionAction(formData: FormData) {
-    "use server";
-    const storybookId = String(formData.get("storybookId") ?? "");
-    const direction = (String(formData.get("direction") ?? "ltr") === "rtl" ? "rtl" : "ltr") as "ltr" | "rtl";
-    if (!storybook) redirect("/studio");
-
-    await updateStorybookMeta({
-      id: storybookId,
-      title: storybook.title,
-      slug: storybook.slug,
-      summary: storybook.summary || "",
-      status: storybook.status,
-      coverAssetId: storybook.coverAssetId || "",
-      direction,
-    });
-    revalidatePath(`/studio/${storybookId}`);
-    revalidatePath("/studio");
-    revalidatePath("/api/storybooks");
-    redirect(`/studio/${storybookId}${selectedPage ? `?page=${encodeURIComponent(selectedPage.id)}` : ""}`);
-  }
-
   const storybook = await getStudioStorybookById(id);
   if (!storybook) {
     return (
@@ -476,6 +455,19 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
   const nextStatus = storybook.status === "published" ? "draft" : "published";
   const justPublished = query.published === "1" && storybook.status === "published";
   const justSaved = query.saved === "1";
+
+  async function updateBookDirectionAction(formData: FormData) {
+    "use server";
+    const storybookId = String(formData.get("storybookId") ?? "");
+    const direction = String(formData.get("direction") ?? "ltr");
+    const pageId = String(formData.get("pageId") ?? "");
+
+    await updateStorybookDirection(storybookId, direction);
+    revalidatePath(`/studio/${storybookId}`);
+    revalidatePath("/studio");
+    revalidatePath("/api/storybooks");
+    redirect(`/studio/${storybookId}${pageId ? `?page=${encodeURIComponent(pageId)}` : ""}`);
+  }
 
   // Center preview: cover and end are single pages; a story page shows the open
   // spread it belongs to. Middle pages are indices 1..total-2, paired (1,2),(3,4)...
@@ -525,6 +517,7 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
         </div>
         <form action={updateBookDirectionAction} style={{ display: "flex", gap: "0.55rem", alignItems: "end", flexWrap: "wrap" }}>
           <input type="hidden" name="storybookId" value={storybook.id} />
+          <input type="hidden" name="pageId" value={selectedPage?.id || ""} />
           <label style={{ display: "grid", gap: "0.25rem", fontSize: 13, color: "#374151" }}>
             Language
             <select name="direction" defaultValue={storybook.direction} style={{ padding: "0.6rem", borderRadius: 8, border: "1px solid #d6dce5", minWidth: 240 }}>

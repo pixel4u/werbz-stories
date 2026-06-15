@@ -41,12 +41,39 @@ interface StoryStructurePointers {
   endPageId: string | null;
 }
 
+export const DEFAULT_STORYBOOK_THEME = {
+  camHeight: 9.85,
+  camTilt: 1.05,
+  fov: 30,
+  exposure: 1.02,
+  spineColor: "#a39a8c",
+  stackThickness: 0.42,
+  restCurl: 0.05,
+  curlStrength: 0.4,
+  pageSag: 0.09,
+  flipDuration: 0.88,
+  direction: "ltr" as const,
+};
+
 const ALLOWED_IMAGE_MIME_TYPES = new Set([
   "image/jpeg",
   "image/png",
   "image/webp",
   "image/gif",
 ]);
+
+function normalizeDirection(direction: unknown): "ltr" | "rtl" {
+  return direction === "rtl" ? "rtl" : "ltr";
+}
+
+function normalizeStoryTheme(theme: unknown, directionOverride?: "ltr" | "rtl"): Record<string, unknown> {
+  const currentTheme = theme && typeof theme === "object" ? { ...(theme as Record<string, unknown>) } : {};
+  return {
+    ...DEFAULT_STORYBOOK_THEME,
+    ...currentTheme,
+    direction: directionOverride ?? normalizeDirection(currentTheme.direction),
+  };
+}
 
 function slugify(input: string): string {
   const slug = input
@@ -118,10 +145,10 @@ export async function listStudioStorybooks(): Promise<StudioStorybookRow[]> {
     .orderBy(asc(storybooks.createdAt), asc(storybooks.title));
 
   return rows.map(({ theme, ...row }) => {
-    const dir = (theme as Record<string, unknown> | null)?.direction;
+    const dir = normalizeDirection((theme as Record<string, unknown> | null)?.direction);
     return {
       ...row,
-      direction: dir === "rtl" ? ("rtl" as const) : ("ltr" as const),
+      direction: dir,
       pageCount: Number(row.pageCount),
       viewCount: Number(row.viewCount),
     };
@@ -165,12 +192,12 @@ export async function getStudioStorybookById(id: string): Promise<StudioStoryboo
     coverAssetId: storybook.coverAssetId,
     coverPageId: pointers.coverPageId,
     endPageId: pointers.endPageId,
-    direction: (storybook.theme as Record<string, unknown> | null)?.direction === "rtl" ? "rtl" : "ltr",
+    direction: normalizeDirection((storybook.theme as Record<string, unknown> | null)?.direction),
     createdAt: storybook.createdAt,
     updatedAt: storybook.updatedAt,
     pageCount: ordered.length,
     viewCount: Number(viewCountRows[0]?.count ?? 0),
-    theme: (storybook.theme as Record<string, unknown> | null) ?? null,
+    theme: normalizeStoryTheme(storybook.theme),
     pages: ordered.map((page, idx) => ({
       id: page.id,
       storybookId: page.storybookId,
@@ -216,10 +243,7 @@ export async function updateStorybookMeta(input: UpdateStorybookMetaInput): Prom
     .from(storybooks)
     .where(eq(storybooks.id, input.id))
     .limit(1);
-  const currentTheme = (existing[0]?.theme as Record<string, unknown> | null) ?? {};
-  const nextTheme: Record<string, unknown> = { ...currentTheme };
-  if (input.direction === "rtl") nextTheme.direction = "rtl";
-  else delete nextTheme.direction; // LTR is the default; don't store it
+  const nextTheme = normalizeStoryTheme(existing[0]?.theme, normalizeDirection(input.direction));
 
   await db
     .update(storybooks)
@@ -229,10 +253,27 @@ export async function updateStorybookMeta(input: UpdateStorybookMetaInput): Prom
       summary: input.summary.trim() || null,
       status: input.status,
       coverAssetId: input.coverAssetId.trim() || null,
-      theme: Object.keys(nextTheme).length ? nextTheme : null,
+      theme: nextTheme,
       updatedAt: new Date(),
     })
     .where(eq(storybooks.id, input.id));
+}
+
+export async function updateStorybookDirection(id: string, direction: unknown): Promise<void> {
+  const db = getDb();
+  const existing = await db
+    .select({ theme: storybooks.theme })
+    .from(storybooks)
+    .where(eq(storybooks.id, id))
+    .limit(1);
+
+  await db
+    .update(storybooks)
+    .set({
+      theme: normalizeStoryTheme(existing[0]?.theme, normalizeDirection(direction)),
+      updatedAt: new Date(),
+    })
+    .where(eq(storybooks.id, id));
 }
 
 export async function setStorybookStatus(id: string, status: "draft" | "published"): Promise<void> {
