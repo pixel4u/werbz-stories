@@ -93,14 +93,26 @@ pnpm dev
 
 ## Deployment (werbz-only)
 
+Automatic deploy flow:
+
+- Make changes
+- Commit
+- Push to `main`
+- GitHub Actions runs on the `werbz-vps` self-hosted runner on the VPS
+- The runner deploys `/var/www/werbz-stories` locally
+- Only PM2 app `werbz-stories` is restarted
+
+There is no SSH step from a GitHub-hosted runner anymore.
+
 On VPS at `/var/www/werbz-stories`:
 
 ```bash
-git pull --ff-only origin main
+git fetch origin main
+git reset --hard origin/main
 pnpm install --frozen-lockfile
+rm -rf .next
 pnpm build
 pnpm db:migrate
-pnpm db:seed
 pm2 restart werbz-stories --update-env
 pm2 save
 ```

@@ -25,15 +25,24 @@ pnpm dev
 
 ## Production Runbook
 
+Automatic deploy flow:
+
+- Make changes
+- Commit
+- Push to `main`
+- GitHub self-hosted runner `werbz-vps` deploys automatically on the VPS
+
 ```bash
 cd /var/www/werbz-stories
-git pull --ff-only origin main
+git fetch origin main
+git reset --hard origin/main
 pnpm install --frozen-lockfile
+rm -rf .next
 pnpm build
 pnpm db:migrate
-pnpm db:seed
 pm2 restart werbz-stories --update-env
 pm2 save
+pm2 status werbz-stories
 ```
 
 ## Smoke Tests

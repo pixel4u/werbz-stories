@@ -1,8 +1,9 @@
 name: Deploy to VPS
 
-# Auto-deploy on every push to main. The job SSHes into the Hostinger VPS and
-# runs the standard werbz-stories runbook. It is scoped to ONLY the
-# werbz-stories app/process — it never touches the RB monolith or other PM2 apps.
+# Auto-deploy on every push to main. The job runs directly on the Werbz VPS via
+# a self-hosted GitHub Actions runner, so there is no SSH hop from a
+# GitHub-hosted runner. It is scoped to ONLY the werbz-stories app/process —
+# it never touches the RB monolith or other PM2 apps.
 on:
   push:
     branches: [main]
@@ -16,57 +17,42 @@ concurrency:
 jobs:
   deploy:
     name: Deploy werbz-stories
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, werbz-vps]
+    timeout-minutes: 30
     steps:
-      - name: Deploy over SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_PORT || 22 }}
-          # Fail the whole job if any command fails (pipefail catches piped cmds too).
-          script_stop: true
-          command_timeout: 15m
-          script: |
-            set -euo pipefail
+      - name: Deploy locally on Werbz VPS
+        shell: bash
+        run: |
+          set -euo pipefail
 
-            APP_DIR="/var/www/werbz-stories"
-            PM2_APP="werbz-stories"
-            DEPLOY_LOCK="/tmp/werbz-stories.deploy.lock"
+          APP_DIR="/var/www/werbz-stories"
+          PM2_APP="werbz-stories"
+          DEPLOY_LOCK="/tmp/werbz-stories.deploy.lock"
 
-            echo "==> Deploying ${PM2_APP} from ${APP_DIR}"
-            echo "==> acquire host deploy lock ${DEPLOY_LOCK}"
-            exec 9>"${DEPLOY_LOCK}"
-            flock -w 900 9
-            cd "${APP_DIR}"
+          echo "==> Deploying ${PM2_APP} from ${APP_DIR} on self-hosted runner"
+          exec 9>"${DEPLOY_LOCK}"
+          flock -w 1800 9
 
-            # Tools live in /usr/bin on this VPS; ensure it's on PATH for the
-            # non-interactive SSH shell.
-            export PATH="/usr/bin:/usr/local/bin:$PATH"
+          cd "${APP_DIR}"
+          export PATH="/usr/bin:/usr/local/bin:$PATH"
 
-            echo "==> sync to origin/main"
-            git fetch origin main
-            git reset --hard origin/main
+          echo "==> sync to origin/main"
+          git fetch origin main
+          git reset --hard origin/main
 
-            echo "==> install deps"
-            pnpm install --frozen-lockfile
+          echo "==> install deps"
+          pnpm install --frozen-lockfile
 
-            echo "==> clean previous Next build output"
-            # Avoid intermittent Turbopack temp-file ENOENT issues by building
-            # from a clean .next directory each deploy.
-            rm -rf .next
-            mkdir -p .next
+          echo "==> clean previous Next build output"
+          rm -rf .next
 
-            echo "==> build"
-            pnpm build
+          echo "==> build"
+          pnpm build
 
-            echo "==> db migrate (no seed)"
-            pnpm db:migrate
+          echo "==> db migrate"
+          pnpm db:migrate
 
-            echo "==> restart ONLY ${PM2_APP}"
-            pm2 restart "${PM2_APP}" --update-env
-            pm2 save
-
-            echo "==> done"
-            pm2 status "${PM2_APP}"
+          echo "==> restart ONLY ${PM2_APP}"
+          pm2 restart "${PM2_APP}" --update-env
+          pm2 save
+          pm2 status "${PM2_APP}"
