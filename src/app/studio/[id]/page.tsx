@@ -14,6 +14,7 @@ import {
   setStorybookStatus,
   type StudioPageRow,
   updatePage,
+  updateStorybookMeta,
 } from "@/lib/studio-service";
 import type { PageContent } from "@/lib/stories/schema";
 import { DeletePageForm } from "@/components/studio/delete-page-form";
@@ -70,6 +71,10 @@ function summaryText(page: StudioPageRow): string {
   if (page.content.kind === "image") return page.content.caption || "Add image";
   if (page.content.kind === "video") return page.content.poster ? "Video poster page" : "Add poster";
   return page.content.poster ? "Embed poster page" : "Add poster";
+}
+
+function languageLabel(direction: "ltr" | "rtl"): "English" | "Hebrew" {
+  return direction === "rtl" ? "Hebrew" : "English";
 }
 
 function surfacePreview(page: StudioPageRow | null, label: string, coverAssetId?: string | null, isCover?: boolean) {
@@ -421,6 +426,27 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
     redirect(`/studio/${storybookId}${nextStatus === "published" ? "?published=1" : ""}`);
   }
 
+  async function updateBookDirectionAction(formData: FormData) {
+    "use server";
+    const storybookId = String(formData.get("storybookId") ?? "");
+    const direction = (String(formData.get("direction") ?? "ltr") === "rtl" ? "rtl" : "ltr") as "ltr" | "rtl";
+    if (!storybook) redirect("/studio");
+
+    await updateStorybookMeta({
+      id: storybookId,
+      title: storybook.title,
+      slug: storybook.slug,
+      summary: storybook.summary || "",
+      status: storybook.status,
+      coverAssetId: storybook.coverAssetId || "",
+      direction,
+    });
+    revalidatePath(`/studio/${storybookId}`);
+    revalidatePath("/studio");
+    revalidatePath("/api/storybooks");
+    redirect(`/studio/${storybookId}${selectedPage ? `?page=${encodeURIComponent(selectedPage.id)}` : ""}`);
+  }
+
   const storybook = await getStudioStorybookById(id);
   if (!storybook) {
     return (
@@ -472,7 +498,7 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
           <Link href="/studio" style={{ padding: "0.45rem 0.7rem", border: "1px solid #d1d5db", borderRadius: 8, textDecoration: "none", color: "inherit", background: "#fff", fontSize: 13 }}>← Studio</Link>
           <div>
             <h1 style={{ margin: 0, fontSize: 22 }}>{storybook.title}</h1>
-            <p style={{ margin: "0.2rem 0 0", color: "#64748b", fontSize: 13 }}>{storybook.status === "published" ? "Published" : "Draft"} • {total} pages</p>
+            <p style={{ margin: "0.2rem 0 0", color: "#64748b", fontSize: 13 }}>{storybook.status === "published" ? "Published" : "Draft"} • {languageLabel(storybook.direction)} • {storybook.direction.toUpperCase()} • {total} pages</p>
           </div>
           <span style={{ background: storybook.status === "published" ? "#d1fae5" : "#f1f5f9", color: storybook.status === "published" ? "#065f46" : "#475569", borderRadius: 999, padding: "0.2rem 0.6rem", fontSize: 12, fontWeight: 700 }}>
             {storybook.status === "published" ? "Published" : "Draft"}
@@ -490,6 +516,27 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
           {storybook.status === "published" ? <CopyLinkButton url={publicLink} /> : null}
         </div>
       </header>
+
+      <section style={{ border: "1px solid #e5e7eb", borderRadius: 14, background: "#fff", padding: "0.9rem 1rem", marginBottom: "1rem", display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", alignItems: "end" }}>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: "0.3rem" }}>Book Settings</div>
+          <div style={{ fontSize: 14, fontWeight: 700 }}>Book language / direction</div>
+          <p style={{ margin: "0.25rem 0 0", color: "#64748b", fontSize: 13 }}>Use this to classify books into English/LTR or Hebrew/RTL across Studio and the public library.</p>
+        </div>
+        <form action={updateBookDirectionAction} style={{ display: "flex", gap: "0.55rem", alignItems: "end", flexWrap: "wrap" }}>
+          <input type="hidden" name="storybookId" value={storybook.id} />
+          <label style={{ display: "grid", gap: "0.25rem", fontSize: 13, color: "#374151" }}>
+            Language
+            <select name="direction" defaultValue={storybook.direction} style={{ padding: "0.6rem", borderRadius: 8, border: "1px solid #d6dce5", minWidth: 240 }}>
+              <option value="ltr">English — Left to Right</option>
+              <option value="rtl">Hebrew — Right to Left</option>
+            </select>
+          </label>
+          <button type="submit" style={{ padding: "0.6rem 0.95rem", borderRadius: 8, border: "1px solid #2563eb", background: "#2563eb", color: "#fff", cursor: "pointer", fontWeight: 700 }}>
+            Save
+          </button>
+        </form>
+      </section>
 
       {justPublished ? (
         <section style={{ border: "1px solid #6ee7b7", background: "#ecfdf5", borderRadius: 12, padding: "0.9rem 1rem", marginBottom: "1rem" }}>
