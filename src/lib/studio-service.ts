@@ -17,6 +17,7 @@ export interface StudioStorybookRow {
   coverPageId: string | null;
   endPageId: string | null;
   direction: "ltr" | "rtl";
+  createdAt: Date;
   updatedAt: Date;
   pageCount: number;
   viewCount: number;
@@ -93,6 +94,7 @@ export async function listStudioStorybooks(): Promise<StudioStorybookRow[]> {
       coverPageId: storybooks.coverPageId,
       endPageId: storybooks.endPageId,
       theme: storybooks.theme,
+      createdAt: storybooks.createdAt,
       updatedAt: storybooks.updatedAt,
       pageCount: sql<number>`count(distinct ${pages.id})::int`,
       viewCount: sql<number>`count(distinct ${viewEvents.id})::int`,
@@ -110,9 +112,10 @@ export async function listStudioStorybooks(): Promise<StudioStorybookRow[]> {
       storybooks.coverPageId,
       storybooks.endPageId,
       storybooks.theme,
+      storybooks.createdAt,
       storybooks.updatedAt
     )
-    .orderBy(asc(storybooks.title));
+    .orderBy(asc(storybooks.createdAt), asc(storybooks.title));
 
   return rows.map(({ theme, ...row }) => {
     const dir = (theme as Record<string, unknown> | null)?.direction;
@@ -163,6 +166,7 @@ export async function getStudioStorybookById(id: string): Promise<StudioStoryboo
     coverPageId: pointers.coverPageId,
     endPageId: pointers.endPageId,
     direction: (storybook.theme as Record<string, unknown> | null)?.direction === "rtl" ? "rtl" : "ltr",
+    createdAt: storybook.createdAt,
     updatedAt: storybook.updatedAt,
     pageCount: ordered.length,
     viewCount: Number(viewCountRows[0]?.count ?? 0),

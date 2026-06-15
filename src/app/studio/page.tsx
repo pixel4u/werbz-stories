@@ -17,9 +17,9 @@ export const dynamic = "force-dynamic";
 
 async function createStorybookAction() {
   "use server";
-  await createStorybook();
+  const storybookId = await createStorybook();
   revalidatePath("/studio");
-  redirect("/studio");
+  redirect(`/studio/${storybookId}`);
 }
 
 async function updateStorybookAction(formData: FormData) {

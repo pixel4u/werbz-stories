@@ -21,7 +21,6 @@ interface SheetTab {
   fileName: string;
   result: UploadResult;
   cards: DetectedCard[];
-  reviewConfirmed: boolean;
 }
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -70,7 +69,6 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
       fileName: file.name,
       result,
       cards: [],
-      reviewConfirmed: false,
     } satisfies SheetTab;
   }
 
@@ -111,14 +109,9 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
         return {
           ...tab,
           cards: nextCards,
-          reviewConfirmed: false,
         };
       })
     );
-  }
-
-  function updateTab(tabId: string, patch: Partial<Pick<SheetTab, "reviewConfirmed">>) {
-    setTabs((prev) => prev.map((tab) => (tab.id === tabId ? { ...tab, ...patch } : tab)));
   }
 
   function duplicateFramesToTarget() {
@@ -135,7 +128,6 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
           ? {
               ...tab,
               cards: copiedCards,
-              reviewConfirmed: false,
             }
           : tab
       )
@@ -162,15 +154,14 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
     [tabs]
   );
 
-  const activeStats = activeTab ? tabStats.find((stats) => stats.tabId === activeTab.id) ?? null : null;
   const duplicateTargets = tabs.filter((tab) => tab.id !== activeTabId);
   const coverCount = tabStats.reduce((sum, stats) => sum + stats.coverCount, 0);
   const endCount = tabStats.reduce((sum, stats) => sum + stats.endCount, 0);
   const pageCount = tabStats.reduce((sum, stats) => sum + stats.pageCount, 0);
   const selectedCount = tabStats.reduce((sum, stats) => sum + stats.selectedCount, 0);
+  const validSheetCount = tabs.filter((tab) => tab.cards.some((c) => c.label === "cover" || c.label === "page" || c.label === "end")).length;
   const importSummary = `Cover + ${pageCount} story page${pageCount === 1 ? "" : "s"} + End`;
-  const allReviewed = tabs.length > 0 && tabs.every((tab) => tab.reviewConfirmed);
-  const importDisabled = importBusy || tabs.length === 0 || selectedCount === 0 || !allReviewed || coverCount !== 1 || endCount !== 1;
+  const importDisabled = importBusy || tabs.length === 0 || selectedCount < 2 || coverCount !== 1 || endCount !== 1;
 
   async function importBook() {
     if (tabs.length === 0) return;
@@ -240,7 +231,7 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
           <div style={{ fontSize: 12, letterSpacing: "0.14em", textTransform: "uppercase", color: "#64748b", fontWeight: 700 }}>Import Contact Sheet</div>
           <h3 style={{ margin: "0.7rem 0 0.4rem", fontSize: 28, lineHeight: 1.1 }}>Upload one or more PNG sheets</h3>
           <p style={{ margin: "0 auto 1.1rem", maxWidth: 420, fontSize: 14, color: "#64748b" }}>
-            Each PNG becomes its own tab in the full-screen crop editor. New uploads reuse the last frame layout so every page stays the same size.
+            Each PNG becomes its own tab in the full-screen crop editor. Add frames, run detection, and import once your cover, pages, and end are ready.
           </p>
           <div style={{ display: "flex", justifyContent: "center", gap: "0.75rem", flexWrap: "wrap" }}>
             <button
@@ -341,13 +332,37 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
         </div>
       }
       modalFooter={
-        <div style={{ display: "grid", gap: "0.55rem" }}>
+        <div style={{ display: "grid", gap: "0.7rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", alignItems: "center" }}>
+            <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", fontSize: 12, color: "#475569" }}>
+              <span>Total sheets: {tabs.length}</span>
+              <span>Sheets with crops: {validSheetCount}</span>
+              <span>Total crops: {selectedCount}</span>
+              <span>Cover crops: {coverCount}</span>
+              <span>Story pages: {pageCount}</span>
+              <span>End crops: {endCount}</span>
+            </div>
+            <button
+              type="button"
+              disabled={importDisabled}
+              onClick={importBook}
+              style={{
+                padding: "0.7rem 1rem",
+                borderRadius: 8,
+                border: "1px solid #2563eb",
+                background: importDisabled ? "#93c5fd" : "#2563eb",
+                color: "#fff",
+                cursor: importDisabled ? "not-allowed" : "pointer",
+                fontWeight: 700,
+                minWidth: 140,
+              }}
+            >
+              {importBusy ? "Importing..." : "Import Book"}
+            </button>
+          </div>
           <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", fontSize: 12, color: "#475569" }}>
-            <span>Total sheets: {tabs.length}</span>
-            <span>Total crops: {selectedCount}</span>
-            <span>Cover crops: {coverCount}</span>
-            <span>Story pages: {pageCount}</span>
-            <span>End crops: {endCount}</span>
+            <span>Import needs exactly 1 Cover and 1 End</span>
+            <span>{selectedCount < 2 ? "Add at least two valid crops to import" : "Frames look import-ready when roles are valid"}</span>
           </div>
           <p style={{ margin: 0, fontSize: 12, color: "#334155" }}>
             Import result preview: <strong>{importSummary}</strong>
@@ -389,28 +404,6 @@ export function ContactSheetUploadForm({ storybookId }: ContactSheetUploadFormPr
               </button>
             </div>
           ) : null}
-          {activeStats ? (
-            <label style={{ display: "flex", gap: "0.45rem", alignItems: "center", fontSize: 12, color: "#334155" }}>
-              <input type="checkbox" checked={activeTab.reviewConfirmed} onChange={(e) => updateTab(activeTab.id, { reviewConfirmed: e.target.checked })} />
-              I reviewed the active tab’s crop boxes and roles.
-            </label>
-          ) : null}
-          <button
-            type="button"
-            disabled={importDisabled}
-            onClick={importBook}
-            style={{
-              padding: "0.7rem 0.9rem",
-              borderRadius: 8,
-              border: "1px solid #2563eb",
-              background: importDisabled ? "#93c5fd" : "#2563eb",
-              color: "#fff",
-              cursor: importDisabled ? "not-allowed" : "pointer",
-              fontWeight: 700,
-            }}
-          >
-            {importBusy ? "Importing..." : "Import Book"}
-          </button>
         </div>
       }
     />

@@ -19,7 +19,6 @@ import type { PageContent } from "@/lib/stories/schema";
 import { DeletePageForm } from "@/components/studio/delete-page-form";
 import { ImageUploadForm } from "@/components/studio/image-upload-form";
 import { CoverUploadForm } from "@/components/studio/cover-upload-form";
-import { BulkUploadForm } from "@/components/studio/bulk-upload-form";
 import { ContactSheetUploadForm } from "@/components/studio/contact-sheet-upload-form";
 import { CopyLinkButton } from "@/components/studio/copy-link-button";
 import { getAssetUrl } from "@/lib/asset-url";
@@ -508,8 +507,8 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
       {total === 0 ? (
         <section style={{ border: "1px solid #e5e7eb", borderRadius: 14, background: "#fff", padding: "1.4rem", maxWidth: 560 }}>
           <h2 style={{ marginTop: 0 }}>Start your storybook</h2>
-          <p style={{ color: "#64748b" }}>Upload all your page images at once, or add your first page.</p>
-          <BulkUploadForm storybookId={storybook.id} />
+          <p style={{ color: "#64748b" }}>Import one or more contact-sheet PNGs, or add your first page manually.</p>
+          <ContactSheetUploadForm storybookId={storybook.id} />
           <form action={addPageAction} style={{ marginTop: "0.8rem" }}>
             <input type="hidden" name="storybookId" value={storybook.id} />
             <input type="hidden" name="kind" value="text" />
@@ -673,17 +672,12 @@ export default async function StudioStorybookPage({ params, searchParams }: Prop
 
       {query.upload === "1" ? (
         <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.46)", zIndex: 70, display: "grid", placeItems: "center", padding: "1.2rem" }}>
-          <div style={{ width: "min(1200px, 100%)", minHeight: "84vh", background: "#fff", borderRadius: 14, boxShadow: "0 20px 60px rgba(15,23,42,.28)", padding: "1rem", display: "grid", gridTemplateRows: "auto 1fr" }}>
+          <div style={{ width: "min(1400px, 100%)", minHeight: "84vh", background: "#fff", borderRadius: 14, boxShadow: "0 20px 60px rgba(15,23,42,.28)", padding: "1rem", display: "grid", gridTemplateRows: "auto 1fr" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.8rem" }}>
               <h2 style={{ margin: 0, fontSize: 18 }}>Upload Full Book</h2>
               <Link href={`/studio/${storybook.id}${selectedPage ? `?page=${encodeURIComponent(selectedPage.id)}` : ""}`} style={{ padding: "0.45rem 0.75rem", borderRadius: 8, border: "1px solid #d1d5db", textDecoration: "none", color: "inherit" }}>Close</Link>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "320px minmax(0, 1fr)", gap: "1rem", alignItems: "start", overflow: "hidden" }}>
-              <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "0.8rem", background: "#f8fafc" }}>
-                <BulkUploadForm storybookId={storybook.id} />
-              </div>
-              <ContactSheetUploadForm storybookId={storybook.id} />
-            </div>
+            <ContactSheetUploadForm storybookId={storybook.id} />
           </div>
         </div>
       ) : null}

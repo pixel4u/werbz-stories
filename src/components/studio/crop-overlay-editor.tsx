@@ -784,11 +784,11 @@ export function CropOverlayEditor({
 
       {isFullscreen ? (
         <div style={{ position: "fixed", inset: 0, zIndex: 120, background: "rgba(15,23,42,.82)", padding: "1rem", display: "grid" }}>
-          <div style={{ background: "#fff", borderRadius: 14, padding: "0.8rem", display: "grid", gridTemplateRows: "auto 1fr", overflow: "hidden" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+          <div style={{ background: "#fff", borderRadius: 14, padding: "0.8rem", display: "grid", gridTemplateRows: "auto minmax(0,1fr) auto", overflow: "hidden", minHeight: 0 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem", gap: "0.75rem" }}>
               <strong>Full-screen Crop Frame Editor</strong>
-              <div style={{ display: "flex", gap: "0.45rem", alignItems: "center" }}>
-                {modalHeader}
+              <div style={{ display: "flex", gap: "0.45rem", alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                <div style={{ display: "flex", minWidth: 0 }}>{modalHeader}</div>
                 <button type="button" onClick={runDetection} disabled={busy} style={{ padding: "0.4rem 0.65rem", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
                   {busy ? "Detecting..." : "Run detection"}
                 </button>
@@ -803,8 +803,8 @@ export function CropOverlayEditor({
                 </button>
               </div>
             </div>
-            <div style={{ overflow: "hidden", display: "grid", gridTemplateColumns: "minmax(0,1fr) 420px", gap: "0.8rem" }}>
-              <div style={{ overflow: "auto", minHeight: "80vh" }}>
+            <div style={{ overflow: "hidden", display: "grid", gridTemplateColumns: "minmax(0,1fr) 420px", gap: "0.8rem", minHeight: 0 }}>
+              <div style={{ overflow: "auto", minHeight: 0 }}>
                 <div style={{ position: "relative", width: "100%", border: "1px solid #e5e7eb", borderRadius: 8, overflow: "hidden", background: "#f8fafc" }}>
                   <img src={sheetUrl} alt="Contact sheet full size" onLoad={(event) => measureDisplayedImageFromElement(event.target as HTMLImageElement, "modal")} style={{ width: "100%", height: "auto", display: "block" }} />
                   {modalDisplaySize.width > 0
@@ -866,7 +866,7 @@ export function CropOverlayEditor({
                     : null}
                 </div>
               </div>
-              <div style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: "0.7rem", overflow: "auto", background: "#fff" }}>
+              <div style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: "0.7rem", overflow: "auto", background: "#fff", minHeight: 0 }}>
                 <div style={{ marginBottom: "0.6rem", display: "grid", gap: "0.35rem" }}>
                   <div style={{ fontSize: 12, color: "#334155" }}>Detected {cards.length} pages</div>
                   {coverCount === 0 ? <div style={{ fontSize: 12, color: "#b45309" }}>Warning: No Cover detected.</div> : null}
@@ -950,13 +950,13 @@ export function CropOverlayEditor({
                   </div>
                 ) : null}
 
-                {modalFooter ? (
-                  <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "0.75rem", marginTop: "0.75rem" }}>
-                    {modalFooter}
-                  </div>
-                ) : null}
               </div>
             </div>
+            {modalFooter ? (
+              <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "0.75rem", marginTop: "0.75rem", background: "#fff" }}>
+                {modalFooter}
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
