@@ -1,0 +1,605 @@
+<title>Werbz Flip Demo v2</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<style>
+/* Layout: one-screen reading table. Slim top bar, the book centred on the table, arrows at the sides, hint row at the bottom. */
+:root{
+  --table:#e4e1da; --table-2:#d6d2ca; --ink:#24272b; --muted:#666a70; --accent:#2c6a88;
+  --chip:#ffffffd9; --chip-line:#0000001a;
+  --paper:#fbf9f4; --paper-ink:#2b2621; --paper-muted:#8a8178;
+  --cover:#1f3546; --cover-ink:#f1e4c3;
+  --font-ui:"Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-page:"Literata", Georgia, "Times New Roman", serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --table:#1a1c1f; --table-2:#121315; --ink:#e7e5e0; --muted:#9a9ea5; --accent:#7db4cf;
+    --chip:#2a2d31e0; --chip-line:#ffffff1a; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --table:#1a1c1f; --table-2:#121315; --ink:#e7e5e0; --muted:#9a9ea5; --accent:#7db4cf;
+  --chip:#2a2d31e0; --chip-line:#ffffff1a; color-scheme:dark;
+}
+html,body{height:100%}
+body{
+  background:radial-gradient(120% 90% at 50% 40%, var(--table) 0%, var(--table-2) 100%);
+  background-color:var(--table);
+  color:var(--ink); font-family:var(--font-ui); overflow:hidden;
+}
+.app{height:100%; display:grid; grid-template-rows:auto 1fr auto;}
+.bar{
+  display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+  padding-block:12px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+}
+.bar h1{font-size:14px; font-weight:600; margin:0; letter-spacing:.01em}
+.bar h1 span{color:var(--muted); font-weight:400}
+.meta{display:flex; align-items:center; gap:10px; font-size:13px; color:var(--muted)}
+.chip{
+  background:var(--chip); border:1px solid var(--chip-line); border-radius:999px;
+  padding:5px 12px; font-variant-numeric:tabular-nums; color:var(--ink);
+}
+label.toggle{display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none}
+label.toggle input{accent-color:var(--accent)}
+
+.stage{position:relative; display:flex; align-items:center; justify-content:center; touch-action:none; min-height:0; overflow:hidden;}
+.wrap{position:relative; transition:transform .55s cubic-bezier(.3,.7,.2,1);}
+.book{position:absolute; left:0; top:0; transform-origin:0 0; user-select:none; -webkit-user-select:none;}
+.spine{position:absolute; top:0; width:0;}
+
+.page{
+  position:absolute; left:0; top:0; transform-origin:0 0; overflow:hidden;
+  background:var(--paper); color:var(--paper-ink); display:none;
+}
+.page::after{content:""; position:absolute; inset:0; pointer-events:none;}
+.page.right::after{background:linear-gradient(90deg, rgba(0,0,0,.16) 0, rgba(0,0,0,.05) 4%, rgba(0,0,0,0) 12%);}
+.page.left::after{background:linear-gradient(270deg, rgba(0,0,0,.16) 0, rgba(0,0,0,.05) 4%, rgba(0,0,0,0) 12%);}
+.page-inner{position:absolute; inset:0; padding:56px 54px 48px; font-family:var(--font-page); display:flex; flex-direction:column;}
+
+.base{position:absolute; top:0; background:var(--paper); box-shadow:0 18px 40px rgba(0,0,0,.28), 0 3px 8px rgba(0,0,0,.18); display:none;}
+.stack{position:absolute; top:2px; display:none; background:repeating-linear-gradient(90deg, #d9d4cb 0 1px, #f6f3ec 1px 2px); border-radius:1px;}
+
+canvas.fx{position:absolute; pointer-events:none;}
+
+/* page content */
+.eyebrow{font-family:var(--font-ui); font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:var(--paper-muted); margin-bottom:22px}
+.body p{font-size:19px; line-height:1.62; margin:0 0 16px; text-wrap:pretty}
+.body p.drop::first-letter{float:left; font-size:64px; line-height:.9; padding:6px 8px 0 0; font-weight:600}
+.center{justify-content:center; text-align:center}
+.center .body p{font-style:italic}
+.folio{margin-top:auto; font-family:var(--font-ui); font-size:11px; color:var(--paper-muted); text-align:center; font-variant-numeric:tabular-nums}
+.fig{padding:0}
+.fig svg{display:block; width:100%; height:86%}
+.fig .cap{height:14%; display:flex; align-items:center; justify-content:center; font-style:italic; font-size:15px; color:var(--paper-muted); padding:0 24px; text-align:center}
+.title-page{align-items:center; justify-content:center; text-align:center; gap:10px}
+.title-page h2{font-size:38px; line-height:1.1; margin:6px 0; font-weight:600; text-wrap:balance}
+.title-page .by{font-size:16px; color:var(--paper-muted); font-style:italic}
+.endpaper .page-inner{padding:0; background:
+  radial-gradient(circle at 12px 12px, #c9a85d 2px, transparent 2.5px) 0 0/28px 28px,
+  radial-gradient(circle at 26px 26px, #8fa9b8 1.5px, transparent 2px) 0 0/28px 28px,
+  #efe6d2;}
+.cover{background:var(--cover)}
+.cover .page-inner{color:var(--cover-ink); padding:40px 40px 36px; align-items:center; text-align:center}
+.cover .kicker{font-family:var(--font-ui); font-size:11px; letter-spacing:.24em; text-transform:uppercase; opacity:.75}
+.cover h2{font-size:42px; line-height:1.05; margin:14px 0 18px; font-weight:600; text-wrap:balance}
+.cover .art{width:100%; flex:1; border:1px solid rgba(241,228,195,.35); padding:8px; min-height:0}
+.cover .art svg{width:100%; height:100%; display:block}
+.cover .author{margin-top:18px; font-style:italic; font-size:17px}
+.cover.right::after{background:linear-gradient(90deg, rgba(0,0,0,.35) 0, rgba(255,255,255,.08) 2.5%, rgba(0,0,0,.12) 4.5%, rgba(0,0,0,0) 9%)}
+.cover.left::after{background:linear-gradient(270deg, rgba(0,0,0,.35) 0, rgba(255,255,255,.08) 2.5%, rgba(0,0,0,.12) 4.5%, rgba(0,0,0,0) 9%)}
+.back-cover .page-inner{justify-content:center}
+.back-cover blockquote{font-size:24px; font-style:italic; margin:0 0 18px}
+.back-cover .imprint{margin-top:auto; font-family:var(--font-ui); font-size:11px; letter-spacing:.2em; text-transform:uppercase; opacity:.6}
+
+.nav{
+  position:absolute; top:50%; transform:translateY(-50%); z-index:5;
+  width:44px; height:44px; border-radius:50%; border:1px solid var(--chip-line); background:var(--chip); color:var(--ink);
+  display:grid; place-items:center; cursor:pointer; font-size:20px;
+}
+.nav:disabled{opacity:.3; cursor:default}
+.nav:focus-visible, .bar input:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.nav.prev{left:max(12px, env(safe-area-inset-left, 0px))}
+.nav.next{right:max(12px, env(safe-area-inset-right, 0px))}
+.hint{
+  text-align:center; font-size:12.5px; color:var(--muted); padding-block:10px 14px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px));
+}
+.hint kbd{font-family:var(--font-ui); font-size:11px; border:1px solid var(--chip-line); background:var(--chip); border-radius:4px; padding:1px 5px}
+</style>
+
+<div class="app">
+  <header class="bar">
+    <h1>The Lantern of the Quiet Wood <span>· flip prototype v2</span></h1>
+    <div class="meta">
+      <label class="toggle" for="foldDebug"><input type="checkbox" id="foldDebug"> Show fold line</label>
+      <label class="toggle" for="slowMo"><input type="checkbox" id="slowMo"> Slow motion</label>
+      <span class="chip" id="counter">Cover</span>
+    </div>
+  </header>
+  <main class="stage" id="stage">
+    <button class="nav prev" id="prevBtn" aria-label="Previous page">‹</button>
+    <div class="wrap" id="wrap">
+      <div class="book" id="book">
+        <div class="spine" id="spine"></div>
+      </div>
+    </div>
+    <button class="nav next" id="nextBtn" aria-label="Next page">›</button>
+  </main>
+  <div class="hint">Grab any corner or edge and drag. Hover a corner to see it lift. Click a page to turn it. <kbd>←</kbd> <kbd>→</kbd> also work.</div>
+</div>
+
+<script>
+(() => {
+/* ============================================================
+   Flat-fold page turn (the FlippingBook / turn.js family)
+   - Pages are real DOM (text stays crisp and selectable).
+   - A turn is a reflection of part of the page across a fold line.
+   - Fold line = perpendicular bisector of the grabbed point G and the pointer P,
+     so the exact point you grabbed stays under your finger.
+   - The page stays attached at the spine: P is kept within reach of both spine ends.
+   - Depth comes from shading only: shadow on the revealed page, drop shadow
+     under the flap, highlight along the crease.
+   ============================================================ */
+
+const W = 440, H = 600, M = 300;           // page size (book units), canvas margin
+const $ = id => document.getElementById(id);
+const stage = $('stage'), wrap = $('wrap'), book = $('book'), spine = $('spine');
+
+/* ---------- content (sample story from specs/best.html) ---------- */
+let gid = 0;
+function scene(kind){
+  const id = 's' + (gid++);
+  const stars = Array.from({length:22}, (_,i) => {
+    const x = (i*97)%400, y = (i*53)%140 + 8, r = (i%3===0)?1.6:1;
+    return `<circle cx="${x}" cy="${y}" r="${r}" fill="#fff" opacity="${.35 + (i%4)*.15}"/>`;
+  }).join('');
+  const lantern = (cx, cy, s=1) => `
+    <circle cx="${cx}" cy="${cy}" r="${110*s}" fill="url(#${id}g)"/>
+    <path d="M${cx-5*s} ${cy-26*s} q${5*s} ${-12*s} ${10*s} 0" stroke="#3a2a1a" stroke-width="${2.5*s}" fill="none"/>
+    <path d="M${cx-16*s} ${cy-16*s}h${32*s}l${-6*s} ${-10*s}h${-20*s}z" fill="#3a2a1a"/>
+    <rect x="${cx-12*s}" y="${cy-16*s}" width="${24*s}" height="${32*s}" rx="${4*s}" fill="#ffe6a8"/>
+    <rect x="${cx-14*s}" y="${cy+16*s}" width="${28*s}" height="${5*s}" rx="2" fill="#3a2a1a"/>`;
+  const defs = `<defs>
+    <radialGradient id="${id}g" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#ffd98a" stop-opacity=".9"/><stop offset=".35" stop-color="#f2a94a" stop-opacity=".35"/><stop offset="1" stop-color="#f2a94a" stop-opacity="0"/></radialGradient>
+    <linearGradient id="${id}s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${kind==='forest'?'#2b2f4f':'#15304a'}"/><stop offset="1" stop-color="${kind==='forest'?'#c98a62':'#43627a'}"/></linearGradient>
+  </defs>`;
+  let body = `<rect width="400" height="300" fill="url(#${id}s)"/>` + stars;
+  if (kind === 'lantern'){
+    body += `<path d="M0 228 Q100 188 200 218 T400 208 V300 H0Z" fill="#22394b"/>
+             <path d="M0 258 Q120 228 240 253 T400 248 V300 H0Z" fill="#142634"/>` + lantern(200, 190);
+  } else if (kind === 'forest'){
+    body += `<circle cx="300" cy="90" r="26" fill="#f6e3b5" opacity=".9"/>`;
+    for (let row=0; row<3; row++){
+      const base = 220 + row*30, col = ['#3d4a4a','#2b3838','#1c2727'][row];
+      for (let i=-1; i<12; i++){
+        const x = i*38 + (row%2)*19, h = 70 + ((i*31+row*17)%40);
+        body += `<path d="M${x} ${base} l19 ${-h} l19 ${h}z" fill="${col}"/>`;
+      }
+      body += `<rect x="0" y="${base}" width="400" height="${300-base}" fill="${col}"/>`;
+    }
+    body += lantern(120, 250, .7);
+  } else if (kind === 'river'){
+    body += `<circle cx="200" cy="80" r="34" fill="#f6ecd0"/>
+      <path d="M0 170 Q200 150 400 175 V300 H0Z" fill="#1d3344"/>
+      <path d="M-20 300 C120 230 160 200 200 188 C240 200 300 230 420 300Z" fill="#335a74"/>
+      <ellipse cx="200" cy="215" rx="26" ry="5" fill="#f6ecd0" opacity=".7"/>
+      <ellipse cx="200" cy="232" rx="34" ry="4" fill="#f6ecd0" opacity=".45"/>
+      <ellipse cx="200" cy="252" rx="44" ry="4" fill="#f6ecd0" opacity=".3"/>`;
+  }
+  return `<svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${defs}${body}</svg>`;
+}
+const text = (paras, opts={}) => `
+  ${opts.eyebrow ? `<div class="eyebrow">${opts.eyebrow}</div>` : ''}
+  <div class="body">${paras.map((p,i)=>`<p class="${i===0&&opts.drop?'drop':''}">${p}</p>`).join('')}</div>`;
+
+const PAGES = [
+  { cls:'cover', html:`<div class="kicker">A Bedtime Tale</div><h2>The Lantern of the Quiet Wood</h2><div class="art">${scene('lantern')}</div><div class="author">Marigold Fenn</div>` },
+  { cls:'endpaper', html:'' },
+  { cls:'', html:`<div class="page-inner title-page" style="position:static;padding:0;height:100%">${scene('lantern').replace('<svg','<svg style="width:160px;height:120px;border-radius:6px"')}<h2>The Lantern of the Quiet Wood</h2><div class="by">written by Marigold Fenn</div></div>`, raw:true },
+  { cls:'', html: text(['Long ago, at the soft edge of the world, there was a wood so quiet you could hear the stars breathing. In it lived a girl named Wren, and a lantern that would not go out.'], {eyebrow:'One', drop:true}) },
+  { cls:'fig', html:`${scene('lantern')}<div class="cap">The lantern that would not go out.</div>` },
+  { cls:'', html: text(['Every evening Wren carried it to the doorway and let it glow, so that anything lost in the dark might find its way home.','One night, something did.']) },
+  { cls:'fig', html:`${scene('forest')}<div class="cap">Into the hush of the trees.</div>` },
+  { cls:'', html: text(['A small fox stood at the treeline, shivering. “I have walked all night,” it said, “and I cannot remember the way.”','“Then walk with me,” said Wren, and lifted the lantern higher.']) },
+  { cls:'fig', html:`${scene('river')}<div class="cap">Where the river kept the moon.</div>` },
+  { cls:'', html: text(['They came to a river that held the whole moon in its hands. One by one the lost things gathered to the light: a heron, a hare, a sleepy little bear.','And the lantern, strange to say, only burned the brighter for the sharing.']) },
+  { cls:'', center:true, html: text(['By morning the wood was not so quiet anymore.','It was full of friends who had found their way.']) },
+  { cls:'', center:true, html: text(['And the little light went on glowing,','for anyone still looking for home.','<span style="font-style:normal;font-family:var(--font-ui);letter-spacing:.2em;font-size:12px;text-transform:uppercase">The End</span>']) },
+  { cls:'endpaper', html:'' },
+  { cls:'cover back-cover', html:`<blockquote>“Sleep softly. The light is still on.”</blockquote><div>Marigold Fenn</div><div class="imprint">werbz stories</div>` },
+];
+const N = PAGES.length;            // even: every leaf has a front and a back
+const LEAVES = N / 2;
+const SPREADS = N / 2 + 1;
+
+/* ---------- build DOM ---------- */
+const pageEls = PAGES.map((p, i) => {
+  const el = document.createElement('div');
+  el.className = `page ${i % 2 === 0 ? 'right' : 'left'} ${p.cls}`;
+  el.style.width = W + 'px'; el.style.height = H + 'px';
+  const isStory = !p.cls || p.cls === 'fig';
+  const folio = (isStory && p.cls !== 'fig' && !p.raw) ? `<div class="folio">${i - 1}</div>` : '';
+  el.innerHTML = p.raw ? `<div class="page-inner">${p.html}</div>`
+    : `<div class="page-inner ${p.center ? 'center' : ''}">${p.html}${folio}</div>`;
+  spine.appendChild(el);
+  return el;
+});
+const mk = (cls, z) => { const e = document.createElement('div'); e.className = cls; e.style.zIndex = z; spine.appendChild(e); return e; };
+const baseL = mk('base', 0), baseR = mk('base', 0), stackL = mk('stack', 0), stackR = mk('stack', 0);
+[baseL, baseR].forEach(b => { b.style.width = W + 'px'; b.style.height = H + 'px'; });
+baseL.style.left = -W + 'px'; baseR.style.left = '0px';
+stackL.style.height = stackR.style.height = (H - 4) + 'px';
+
+function mkCanvas(z){
+  const c = document.createElement('canvas'); c.className = 'fx'; c.style.zIndex = z;
+  c.style.left = -(W + M) + 'px'; c.style.top = -M + 'px';
+  c.style.width = (2*W + 2*M) + 'px'; c.style.height = (H + 2*M) + 'px';
+  spine.appendChild(c); return c;
+}
+const cvUnder = mkCanvas(2), cvDrop = mkCanvas(4), cvShade = mkCanvas(6);
+const ctxs = [cvUnder, cvDrop, cvShade].map(c => c.getContext('2d'));
+const PAPER = getComputedStyle(document.documentElement).getPropertyValue('--paper').trim() || '#fbf9f4';
+
+book.style.width = 2*W + 'px'; book.style.height = H + 'px';
+spine.style.left = W + 'px'; spine.style.height = H + 'px';
+
+/* ---------- geometry helpers ---------- */
+const sub = (a,b) => ({x:a.x-b.x, y:a.y-b.y});
+const dot = (a,b) => a.x*b.x + a.y*b.y;
+const dist = (a,b) => Math.hypot(a.x-b.x, a.y-b.y);
+const lerp = (a,b,t) => ({x:a.x+(b.x-a.x)*t, y:a.y+(b.y-a.y)*t});
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+const easeInOut = t => t<.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2;
+const easeOut = t => 1 - Math.pow(1-t, 3);
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t*t*(3 - 2*t); };
+// A soft shadow falloff: (1-f)^2.2 sampled into stops, so the edge feathers instead of ending in a line.
+function featherStops(g, alpha, [r, gg, b]){
+  for (let i = 0; i <= 10; i++){
+    const f = i / 10, a = alpha * Math.pow(1 - f, 2.2);
+    g.addColorStop(f, `rgba(${r},${gg},${b},${a.toFixed(3)})`);
+  }
+}
+
+// Keep the page attached at the spine: P must stay within reach of both spine ends.
+function constrain(P, G){
+  const S1 = {x:0, y:0}, S2 = {x:0, y:H};
+  const r1 = dist(G, S1), r2 = dist(G, S2);
+  let p = {x:Math.min(P.x, G.x), y:P.y};   // pulling outward does nothing
+  for (let i = 0; i < 6; i++){
+    for (const [S, r] of [[S1, r1], [S2, r2]]){
+      const d = dist(p, S);
+      if (d > r){ p = {x:S.x + (p.x-S.x)*r/d, y:S.y + (p.y-S.y)*r/d}; }
+    }
+  }
+  return p;
+}
+// Sutherland–Hodgman against one half-plane: keep points where sign*((p-Q)·n) >= 0
+function clipHalf(poly, Q, n, sign){
+  const out = [];
+  for (let i = 0; i < poly.length; i++){
+    const a = poly[i], b = poly[(i+1) % poly.length];
+    const da = sign*dot(sub(a,Q), n), db = sign*dot(sub(b,Q), n);
+    if (da >= 0) out.push(a);
+    if ((da >= 0) !== (db >= 0)) out.push(lerp(a, b, da/(da-db)));
+  }
+  return out;
+}
+const reflect = (p, Q, n) => { const k = 2*dot(sub(p,Q), n); return {x:p.x - k*n.x, y:p.y - k*n.y}; };
+const poly2css = pts => pts.length < 3 ? 'polygon(0 0,0 0,0 0)' : `polygon(${pts.map(p => `${p.x.toFixed(2)}px ${p.y.toFixed(2)}px`).join(',')})`;
+function invert(m){ // m = [a,b,c,d,e,f]
+  const [a,b,c,d,e,f] = m, det = a*d - b*c;
+  return [d/det, -b/det, -c/det, a/det, (c*f - d*e)/det, (b*e - a*f)/det];
+}
+const apply = (m, p) => ({x:m[0]*p.x + m[2]*p.y + m[4], y:m[1]*p.x + m[3]*p.y + m[5]});
+
+/* ---------- book state ---------- */
+let spread = 0;      // spread k shows pages 2k-1 (left) and 2k (right)
+let flip = null;     // {s, G, P, mode:'peek'|'drag'|'anim', ...} in s-frame (front page always on the right)
+let raf = 0, scale = 1, dpr = 1;
+const leftIdx  = k => { const i = 2*k - 1; return i >= 0 && i < N ? i : null; };
+const rightIdx = k => { const i = 2*k;     return i >= 0 && i < N ? i : null; };
+const canFlip = s => s > 0 ? rightIdx(spread) !== null : leftIdx(spread) !== null;
+
+function hideAll(){ pageEls.forEach(e => { e.style.display = 'none'; }); }
+function place(i, x, z){
+  if (i === null) return null;
+  const el = pageEls[i];
+  el.style.display = 'block'; el.style.zIndex = z;
+  el.style.transform = `translate(${x}px,0)`; el.style.clipPath = 'none';
+  return el;
+}
+function clearFx(){ ctxs.forEach(c => { c.setTransform(1,0,0,1,0,0); c.clearRect(0,0,c.canvas.width,c.canvas.height); }); }
+
+function showStatic(){
+  hideAll(); clearFx();
+  place(leftIdx(spread), -W, 1);
+  place(rightIdx(spread), 0, 1);
+  updateChrome();
+}
+
+function updateChrome(){
+  const L = leftIdx(spread), R = rightIdx(spread);
+  // centre a closed book on its single visible cover
+  const shift = L === null ? -W/2 : R === null ? W/2 : 0;
+  wrap.style.transform = `translateX(${shift*scale}px)`;
+  baseL.style.display = L === null ? 'none' : 'block';
+  baseR.style.display = R === null ? 'none' : 'block';
+  const tl = Math.min(9, spread * 1.3), tr = Math.min(9, (LEAVES - spread) * 1.3);
+  stackL.style.display = (L === null || spread <= 1) ? 'none' : 'block';
+  stackR.style.display = (R === null || spread >= LEAVES - 1) ? 'none' : 'block';
+  stackL.style.width = tl + 'px'; stackL.style.left = (-W - tl) + 'px';
+  stackR.style.width = tr + 'px'; stackR.style.left = W + 'px';
+  $('counter').textContent = L === null ? `Cover · ${N} pages` : R === null ? `Back cover · ${N} pages`
+    : `Pages ${L+1}–${R+1} of ${N}`;
+  $('prevBtn').disabled = !canFlip(-1);
+  $('nextBtn').disabled = !canFlip(1);
+}
+
+/* ---------- the turn ---------- */
+function renderFlip(){
+  const f = flip, s = f.s;
+  const front = s > 0 ? rightIdx(spread) : leftIdx(spread);
+  const back  = s > 0 ? leftIdx(spread+1) : rightIdx(spread-1);
+  const under = s > 0 ? rightIdx(spread+1) : leftIdx(spread-1);
+  const still = s > 0 ? leftIdx(spread) : rightIdx(spread);
+  hideAll(); clearFx();
+  place(still, s > 0 ? -W : 0, 1);
+  place(under, s > 0 ? 0 : -W, 1);
+  const frontEl = place(front, s > 0 ? 0 : -W, 3);
+
+  const G = f.G, P = f.P = constrain(f.P, G);
+  const d = dist(G, P);
+  if (d < 0.05) return;
+
+  const n = {x:(G.x-P.x)/d, y:(G.y-P.y)/d};          // points toward the grabbed side
+  const Q = lerp(G, P, .5);                           // a point on the fold line
+  const rect = [{x:0,y:0},{x:W,y:0},{x:W,y:H},{x:0,y:H}];
+  const keep = clipHalf(rect, Q, n, -1);              // part of the front that stays down
+  const lifted = clipHalf(rect, Q, n, +1);            // part that turns over (reveals the page under it)
+  const flap = lifted.map(p => reflect(p, Q, n));     // where that part lands, showing its back
+
+  const toB = p => ({x:s*p.x, y:p.y});                // s-frame -> book coords
+  const oFront = s > 0 ? 0 : -W;
+  frontEl.style.clipPath = poly2css(keep.map(toB).map(p => ({x:p.x - oFront, y:p.y})));
+
+  // Back face: mirror it onto the front's footprint, then reflect across the fold.
+  const oBack = s > 0 ? -W : 0;
+  const backMap = e => {
+    const bx = e.x + oBack;                // landed book x
+    const m = {x:-(s*bx), y:e.y};          // matching point on the front (s-frame)
+    const r = reflect(m, Q, n);
+    return {x:s*r.x, y:r.y};
+  };
+  const o = backMap({x:0,y:0}), ex = sub(backMap({x:1,y:0}), o), ey = sub(backMap({x:0,y:1}), o);
+  const mat = [ex.x, ex.y, ey.x, ey.y, o.x, o.y];
+  const inv = invert(mat);
+  if (back !== null){
+    const el = pageEls[back];
+    el.style.display = 'block'; el.style.zIndex = 5;
+    el.style.transform = `matrix(${mat.map(v => v.toFixed(5)).join(',')})`;
+    el.style.clipPath = poly2css(flap.map(toB).map(p => apply(inv, p)));
+  }
+
+  /* ---- shading ---- */
+  const t = clamp(d / (2*W), 0, 1);
+  const k = Math.pow(Math.sin(Math.PI * t), .55);     // 0 at rest, peaks mid-turn, 0 when landed
+  // light/shade strength: full almost as soon as the page lifts, fades only as it lands
+  const ks = Math.min(1, t * 6) * (1 - smooth(.82, 1, t));
+  const QB = toB(Q), nB = {x:s*n.x, y:n.y};
+  const flapB = flap.map(toB), liftedB = lifted.map(toB);
+  let flapW = 1; for (const p of flap) flapW = Math.max(flapW, -dot(sub(p,Q), n));
+  const K = scale * dpr;
+  ctxs.forEach(c => c.setTransform(K, 0, 0, K, (W + M)*K, M*K));
+  const path = (c, pts) => { c.beginPath(); pts.forEach((p,i) => i ? c.lineTo(p.x,p.y) : c.moveTo(p.x,p.y)); c.closePath(); };
+
+  // 1) shadow on the newly revealed page: darkest at the fold, with a long soft
+  //    feather that grows with the flap (the more page is turned, the wider it gets)
+  if (under !== null){
+    const c = ctxs[0], len = clamp(flapW * .85, 28, W * .9);
+    const g = c.createLinearGradient(QB.x, QB.y, QB.x + nB.x*len, QB.y + nB.y*len);
+    featherStops(g, .40 * ks, [0,0,0]);
+    c.save(); path(c, liftedB); c.clip(); c.fillStyle = g; c.fillRect(-W-M, -M, 2*W+2*M, H+2*M); c.restore();
+  }
+  // 2) soft drop shadow under the flap (falls on the page below and the opposite page)
+  {
+    const c = ctxs[1];
+    // wide and faint, so the flap's white edge sits on a soft halo, not a grey outline
+    c.save(); c.shadowColor = `rgba(0,0,0,${.20*k + .02})`; c.shadowBlur = (16 + 34*k) * K;
+    c.shadowOffsetX = -nB.x * 10 * k * K; c.shadowOffsetY = (-nB.y * 10 * k + 4) * K;
+    c.fillStyle = PAPER; path(c, flapB); c.fill(); c.restore();
+  }
+  // 3) light on the flap, all proportional to the flap's width so it grows with the page:
+  //    strong white right at the fold, feathering into a grey that grows with the page.
+  {
+    const c = ctxs[2], L = Math.max(flapW, 1);
+    const g = c.createLinearGradient(QB.x, QB.y, QB.x - nB.x*L, QB.y - nB.y*L);
+    const rgba = (r, a) => `rgba(${r},${r},${r},${Math.max(0, a).toFixed(3)})`;
+    // Measured from the reference: a narrow white band at the fold (roughly fixed width),
+    // then a grey band that widens as more of the page is turned, then clean paper.
+    const whiteW = Math.min(10, L * .18);                // ~10 book units, less on tiny folds
+    const greyW  = Math.min(L * .80, 30 + L * .17);      // grows with the flap
+    const at = px => clamp(px / L, 0, 1);
+    g.addColorStop(0,                       rgba(255, .90*ks));   // white at the fold
+    g.addColorStop(at(whiteW * .5),         rgba(255, .55*ks));
+    g.addColorStop(at(whiteW),              rgba(255, 0));
+    g.addColorStop(at(whiteW + greyW*.15),  rgba(0,   .15*ks));   // grey right after the white
+    g.addColorStop(at(whiteW + greyW*.35),  rgba(0,   .20*ks));
+    g.addColorStop(at(whiteW + greyW*.65),  rgba(0,   .09*ks));
+    g.addColorStop(at(whiteW + greyW),      rgba(0,   0));        // feathers out into paper
+    g.addColorStop(1,                       rgba(0,   0));
+    c.save(); path(c, flapB); c.clip(); c.fillStyle = g; c.fillRect(-W-M, -M, 2*W+2*M, H+2*M); c.restore();
+    // cover the anti-aliased seam: stroke the fold edge itself, straddling it by ~1px
+    const onFold = flap.filter(p => Math.abs(dot(sub(p, Q), n)) < .5).map(toB);
+    if (onFold.length >= 2){
+      c.save(); c.strokeStyle = `rgba(255,255,255,${Math.min(1, .95*ks + .25).toFixed(3)})`;
+      c.lineWidth = 2 / scale; c.lineCap = 'butt';
+      c.beginPath(); c.moveTo(onFold[0].x, onFold[0].y); c.lineTo(onFold[onFold.length-1].x, onFold[onFold.length-1].y); c.stroke();
+      c.restore();
+    }
+  }
+  if ($('foldDebug').checked){
+    const c = ctxs[2], dir = {x:-nB.y, y:nB.x};
+    c.save(); c.lineWidth = 1.5 / scale; c.strokeStyle = '#e0457b'; c.setLineDash([6/scale, 5/scale]);
+    c.beginPath(); c.moveTo(QB.x - dir.x*2000, QB.y - dir.y*2000); c.lineTo(QB.x + dir.x*2000, QB.y + dir.y*2000); c.stroke();
+    c.setLineDash([]);
+    const GB = toB(G), PB = toB(P);
+    c.fillStyle = '#2c6a88'; c.beginPath(); c.arc(GB.x, GB.y, 6/scale, 0, 7); c.fill();
+    c.fillStyle = '#e0457b'; c.beginPath(); c.arc(PB.x, PB.y, 6/scale, 0, 7); c.fill();
+    c.restore();
+  }
+}
+
+function kick(){ if (!raf) raf = requestAnimationFrame(tick); }
+function tick(now){
+  raf = 0;
+  if (!flip) return;
+  if (flip.mode === 'peek'){
+    flip.P = lerp(flip.P, flip.target, .2);
+    if (dist(flip.target, flip.G) < .01 && dist(flip.P, flip.G) < .4){ flip = null; showStatic(); return; }
+  } else if (flip.mode === 'anim'){
+    const a = flip.anim;
+    const u = clamp((now - a.t0) / a.dur, 0, 1), e = a.ease(u);
+    const p = lerp(a.from, a.to, e);
+    p.y -= a.lift * Math.sin(Math.PI * u);
+    flip.P = p;
+    if (u >= 1){ finishAnim(); return; }
+  }
+  renderFlip();
+  kick();
+}
+function finishAnim(){
+  const a = flip.anim;
+  if (a.commit) spread += flip.s;
+  flip = null; showStatic();
+}
+const durMul = () => ($('slowMo').checked ? 4 : 1) * (matchMedia('(prefers-reduced-motion: reduce)').matches ? .5 : 1);
+
+function animateTo(commit, dur, lift, ease){
+  const G = flip.G, from = constrain(flip.P, G);
+  flip.mode = 'anim';
+  flip.anim = { from, to: commit ? {x:-G.x, y:G.y} : {...G}, t0: performance.now(), dur: dur * durMul(),
+                lift, ease, commit };
+  kick();
+}
+// Turn by button / key / click: from the peeked corner if one is up, else the bottom corner.
+function turn(s){
+  if (flip && flip.mode === 'anim'){ if (flip.anim.commit) finishAnim(); else { flip = null; showStatic(); } }
+  if (flip && flip.mode === 'drag') return;
+  if (!canFlip(s)) return;
+  if (!(flip && flip.mode === 'peek' && flip.s === s)){
+    flip = {s, G:{x:W, y:H}, P:{x:W, y:H}};
+  }
+  const bottom = flip.G.y > H/2 ? 1 : -1;
+  animateTo(true, 820, bottom * H * .2, easeInOut);
+}
+
+/* ---------- input ---------- */
+function toBook(e){
+  const r = book.getBoundingClientRect(), sc = r.width / (2*W);
+  return {x:(e.clientX - r.left)/sc - W, y:(e.clientY - r.top)/sc};
+}
+// Grabbing near the top/bottom snaps to that corner; anywhere else grabs the outer edge at that height.
+function grabPoint(sp){
+  if (sp.y < H*.18) return {x:W, y:0};
+  if (sp.y > H*.82) return {x:W, y:H};
+  return {x:W, y:sp.y};
+}
+const CORNER = 90;
+function hover(pt){
+  if (flip && flip.mode !== 'peek') return;
+  const s = pt.x >= 0 ? 1 : -1, sp = {x:s*pt.x, y:pt.y};
+  const near = canFlip(s) && sp.x > W - CORNER && sp.x < W + 14 && sp.y > -14 && sp.y < H + 14 && (sp.y < CORNER || sp.y > H - CORNER);
+  if (near){
+    const top = sp.y < H/2, C = {x:W, y: top ? 0 : H};
+    if (!flip || flip.s !== s || flip.G.y !== C.y){ flip = {s, G:C, P:{...C}, mode:'peek'}; }
+    // the corner leans toward the cursor a little
+    const pull = clamp((W + 14 - sp.x) / CORNER, 0, 1);
+    flip.target = {x: W - 46 - 30*pull, y: top ? 20 + 14*pull : H - 20 - 14*pull};
+    kick();
+  } else if (flip && flip.mode === 'peek'){
+    flip.target = {...flip.G}; kick();
+  }
+}
+
+stage.addEventListener('pointerdown', e => {
+  if (e.button !== 0 || e.target.closest('.nav')) return;
+  const pt = toBook(e);
+  if (pt.x < -W || pt.x > W || pt.y < 0 || pt.y > H) return;
+  if (flip && flip.mode === 'anim'){ if (flip.anim.commit) finishAnim(); else { flip = null; showStatic(); } }
+  const s = pt.x >= 0 ? 1 : -1;
+  if (!canFlip(s)) return;
+  const sp = {x:s*pt.x, y:pt.y};
+  let G, P;
+  if (flip && flip.mode === 'peek' && flip.s === s){ G = flip.G; P = constrain(flip.P, G); }
+  else { G = grabPoint(sp); P = {...G}; }
+  const now = performance.now();
+  flip = {s, G, P, mode:'drag', offset:sub(sp, P), down:{x:e.clientX, y:e.clientY, t:now, sp}, moved:0, hist:[{x:sp.x, y:sp.y, t:now}]};
+  try { stage.setPointerCapture(e.pointerId); } catch (_) {}
+  e.preventDefault();
+  kick();
+});
+stage.addEventListener('pointermove', e => {
+  const pt = toBook(e);
+  if (flip && flip.mode === 'drag'){
+    const s = flip.s, sp = {x:s*pt.x, y:pt.y}, now = performance.now();
+    flip.P = constrain(sub(sp, flip.offset), flip.G);
+    flip.moved = Math.max(flip.moved, Math.hypot(e.clientX - flip.down.x, e.clientY - flip.down.y));
+    flip.hist.push({x:sp.x, y:sp.y, t:now});
+    while (flip.hist.length > 2 && now - flip.hist[0].t > 100) flip.hist.shift();
+    kick();
+  } else if (e.pointerType === 'mouse'){
+    hover(pt);
+  }
+});
+function release(e){
+  if (!flip || flip.mode !== 'drag') return;
+  const now = performance.now(), f = flip;
+  if (f.moved < 6 && now - f.down.t < 350){
+    // a click: turn from the nearest corner (keeps a peeked corner if one is up)
+    const C = {x:W, y: f.down.sp.y < H/2 ? 0 : H};
+    if (f.G.x !== C.x || f.G.y !== C.y){ f.G = C; f.P = {...C}; }
+    animateTo(true, 820, (f.G.y > H/2 ? 1 : -1) * H * .2, easeInOut);
+    return;
+  }
+  const h0 = f.hist[0], h1 = f.hist[f.hist.length - 1];
+  const vx = (h1.t - h0.t) > 8 ? (h1.x - h0.x) / (h1.t - h0.t) : 0;   // s-frame px/ms (negative = toward spine)
+  const commit = vx < -0.45 ? true : vx > 0.45 ? false : f.P.x < W * 0.15;
+  const to = commit ? {x:-f.G.x, y:f.G.y} : f.G;
+  const remaining = dist(f.P, to) / (2*W);
+  const lift = commit ? (f.G.y > H/2 ? 1 : -1) * H * .08 * remaining : 0;
+  animateTo(commit, 200 + 520*remaining, lift, easeOut);
+}
+stage.addEventListener('pointerup', release);
+stage.addEventListener('pointercancel', release);
+stage.addEventListener('pointerleave', () => { if (flip && flip.mode === 'peek'){ flip.target = {...flip.G}; kick(); } });
+
+$('prevBtn').addEventListener('click', () => turn(-1));
+$('nextBtn').addEventListener('click', () => turn(1));
+addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight'){ turn(1); e.preventDefault(); }
+  if (e.key === 'ArrowLeft'){ turn(-1); e.preventDefault(); }
+});
+$('foldDebug').addEventListener('change', () => { if (flip) kick(); });
+
+/* ---------- sizing ---------- */
+function resize(){
+  const r = stage.getBoundingClientRect();
+  const padX = r.width < 700 ? 24 : 140, padY = 28;
+  scale = Math.max(.2, Math.min((r.width - padX) / (2*W), (r.height - padY) / H, 1.25));
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  wrap.style.width = 2*W*scale + 'px'; wrap.style.height = H*scale + 'px';
+  book.style.transform = `scale(${scale})`;
+  for (const c of [cvUnder, cvDrop, cvShade]){
+    c.width = Math.round((2*W + 2*M) * scale * dpr);
+    c.height = Math.round((H + 2*M) * scale * dpr);
+  }
+  if (flip) renderFlip(); else showStatic();
+}
+addEventListener('resize', resize);
+resize();
+})();
+</script>

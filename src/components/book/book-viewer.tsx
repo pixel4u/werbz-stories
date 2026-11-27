@@ -14,9 +14,11 @@ export function BookViewer({ slug, title }: BookViewerProps) {
 
   const src = useMemo(() => {
     const base = `/api/book/${encodeURIComponent(slug)}`;
+    // Only known engines pass through; anything else falls back to the stable one.
+    const engine = searchParams.get("engine") === "v3" ? "v3" : "best";
     const debug = searchParams.get("debug");
-    if (debug === "1") return `${base}?engine=best&debug=1`;
-    return `${base}?engine=best`;
+    if (debug === "1") return `${base}?engine=${engine}&debug=1`;
+    return `${base}?engine=${engine}`;
   }, [slug, searchParams]);
 
   return (

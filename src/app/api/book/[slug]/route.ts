@@ -434,6 +434,7 @@ function serveEngineFile(fileName: string): NextResponse {
  * reader loads. Pixi is served from /api/book/pixi (vendored from node_modules).
  *
  * Older engines remain ONLY as explicit debug/reference escape hatches:
+ *   ?engine=v3   -> specs/book-engine-v3.html (flat-fold DOM turn, opt-in preview)
  *   ?engine=v30  -> specs/book-engine-v30.html (Pixi, reference)
  *   ?engine=v29  -> server-transformed Three.js engine (legacy buildEngineHtml)
  * Nothing reader-facing depends on them by default.
@@ -451,6 +452,11 @@ export async function GET(request: Request, { params }: Params) {
 
   if (engine === "v30") {
     return serveEngineFile("book-engine-v30.html");
+  }
+
+  if (engine === "v3") {
+    // Flat-fold DOM engine (FlippingBook-style turn). Opt-in preview while it is evaluated.
+    return serveEngineFile("book-engine-v3.html");
   }
 
   // Default + ?engine=best: the active public reader engine.
